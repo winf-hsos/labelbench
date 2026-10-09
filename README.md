@@ -390,9 +390,11 @@ each number carries a short explanation of what it means.
   runs per level and list the items that changed between them.
 
 Reviewers often notice that the gold label itself is wrong. Such rows can be
-marked as "gold label doubtful" in the item details and exported as CSV, so
-the gold standard can be corrected afterwards. The marks are stored in the
-reviewer's browser only, which is why the export exists.
+marked as "gold label doubtful" in the item details and exported as CSV or as
+an Excel file, so the gold standard can be corrected afterwards. The Excel
+file has a frozen header, a filter on every column and wrapped feature texts;
+the report writes it itself, without any library or network access. The marks
+are stored in the reviewer's browser only, which is why the export exists.
 
 The language of the report is set with `language` in `task.yaml`; English
 and German are available.
