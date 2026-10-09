@@ -210,10 +210,10 @@ command creates `configs/claude-v1.yaml`, `prompts/claude-v1-system.md` and
 `prompts/claude-v1-item.md`:
 
 ```bash
-labelbench new classifier claude --template llm --provider anthropic --task tasks/tickets
+labelbench new classifier claude --provider anthropic --task tasks/tickets
 ```
 
-`--model` sets the model; without it the template uses the provider's default
+`--provider` implies `--template llm`. `--model` sets the model; without it the template uses the provider's default
 shown by `labelbench templates`.
 
 ## The LLM classifier
@@ -347,7 +347,8 @@ file, such as a prompt template, labelbench records its checksum in
 |---|---|
 | `labelbench init [DIR] [--llm PROVIDER] [--model M]` | create a project with an example task, a rule-based and optionally an LLM classifier |
 | `labelbench new task NAME` | create an empty task in `tasks/NAME` |
-| `labelbench new classifier NAME --template rules\|llm [--provider P] [--model M] [--task T]` | create a classifier from a template, pre-filled from task T |
+| `labelbench new classifier NAME --template rules [--task T]` | create a rule-based classifier, pre-filled from task T |
+| `labelbench new classifier NAME --provider P [--model M] [--task T]` | create an LLM classifier for provider P (implies `--template llm`) |
 | `labelbench templates` | list classifier templates, LLM providers and their default models |
 | `labelbench check --task T` | check task T for consistency problems |
 | `labelbench run --task T --clf C` | classify the `dev` items of task T (all items if it has no splits) with classifier C and evaluate |

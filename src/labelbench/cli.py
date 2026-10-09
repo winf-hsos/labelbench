@@ -35,7 +35,8 @@ def main(argv: list[str] | None = None) -> int:
     q.add_argument("name")
     q = new.add_parser("classifier", help="create a classifier config (and code or prompts)")
     q.add_argument("name")
-    q.add_argument("--template", required=True, choices=TEMPLATES)
+    q.add_argument("--template", choices=TEMPLATES,
+                   help="rules or llm; --provider alone implies llm")
     q.add_argument("--provider", choices=PROVIDERS, help="LLM provider, for --template llm")
     q.add_argument("--model", help="model name, for --template llm")
     q.add_argument("--task", help="existing task whose features and labels pre-fill the template")
@@ -98,7 +99,10 @@ def cmd_new(args: argparse.Namespace) -> int:
         print("\nFill labels.csv and gold.csv, adjust task.yaml, then run:")
         print(f"  labelbench check --task tasks/{args.name}")
         return 0
-    files = new_classifier(".", args.name, args.template, provider=args.provider,
+    template = args.template or ("llm" if args.provider else None)
+    if template is None:
+        raise ScaffoldError("Choose --template rules, or --provider for an LLM classifier.")
+    files = new_classifier(".", args.name, template, provider=args.provider,
                            model=args.model, task=args.task)
     _print_created(files, Path("."))
     config = next(f for f in files if f.suffix == ".yaml")

@@ -24,7 +24,7 @@ labelbench check --task tasks/example
 labelbench run --task tasks/example --clf configs/keywords-v1.yaml
 labelbench compare runs/<run_a> runs/<run_b>
 labelbench new task NAME
-labelbench new classifier NAME --template llm --provider anthropic --task tasks/NAME
+labelbench new classifier NAME --provider anthropic --task tasks/NAME
 ```
 
 Run all commands from this folder, because classifiers and prompts are found

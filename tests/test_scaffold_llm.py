@@ -164,6 +164,16 @@ def test_anthropic_refusal_raises(monkeypatch):
         provider.complete(None, "user text", {"type": "object"})
 
 
+def test_cli_provider_implies_llm_template(project, monkeypatch):
+    from labelbench.cli import main
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    assert main(["new", "classifier", "quick", "--provider", "openai",
+                 "--task", "tasks/example"]) == 0
+    assert read_yaml(project / "configs" / "quick-v1.yaml")["classifier"] == "llm"
+    assert main(["new", "classifier", "nothing"]) == 2
+
+
 def test_builtin_llm_is_registered(project, monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     new_classifier(".", "oa", "llm", provider="openai", task="tasks/example")
