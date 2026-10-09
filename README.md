@@ -24,6 +24,8 @@ on which items it did not.
 - [Checking a task](#checking-a-task)
 - [Classifiers from templates](#classifiers-from-templates)
 - [The LLM classifier](#the-llm-classifier)
+- [Probabilities](#probabilities)
+- [The Decisions API classifier](#the-decisions-api-classifier)
 - [Writing a classifier](#writing-a-classifier)
 - [Commands](#commands)
 - [The report](#the-report)
@@ -270,6 +272,72 @@ With `fallbacks: default`, Anthropic re-runs a request that a model's safety
 classifier declined on a fallback model. The model that answered is recorded
 per item, so such cases remain visible in the report.
 
+## Probabilities
+
+Many classifiers know how sure they are. If the config sets
+`probability: true`, labelbench asks the classifier for the probability that
+each predicted label is correct, stores it in `predictions.csv` and evaluates
+it in the report:
+
+```yaml
+classifier: decision
+probability: true
+params: {...}
+```
+
+A classifier that cannot deliver probabilities makes the run stop with an
+error, so a missing probability never goes unnoticed. Your own classifiers
+deliver them by implementing `enable_probability()`, which labelbench calls
+when the config asks for probabilities, and by setting `Prediction.probability`
+to a number between 0 and 1.
+
+The report then shows the probability of every item, filters and sorts the
+items by it (least certain first is the natural order for checking by hand)
+and adds a section to the overview:
+
+- **Discrimination (AUC):** how well the probability separates correct from
+  wrong predictions, from 0.5 (chance) to 1 (perfect). This decides how
+  useful the probability is for picking items to check by hand.
+- **Reliability:** per probability range, the mean stated probability against
+  the share actually correct, summarised as calibration error (ECE) and Brier
+  score. A cautious classifier that states 60 % but is right 85 % of the time
+  has a poor ECE but can still discriminate well.
+- **Accept only confident predictions:** for thresholds from 50 % to 99 %,
+  how many predictions would be accepted automatically and how many of them
+  are correct.
+
+The two built-in classifiers produce probabilities differently. `decision`
+reports the probability the Decisions API computes. `llm` asks the model for
+its own estimate in the JSON answer, which is self-reported rather than
+measured; the report says so.
+
+## The Decisions API classifier
+
+The built-in classifier `decision` uses OpenAI's
+[Decisions API](https://developers.openai.com/api/docs/guides/decisions),
+which answers a choice question with a probability for every option. It
+needs no output tokens and no JSON schema, and it always knows its
+probabilities.
+
+```yaml
+classifier: decision
+probability: true
+params:
+  model: gpt-6-luna                      # the only model the API supports so far
+  instructions: prompts/decision-question.md   # the question, e.g. "Which topic fits best?"
+  prompt: prompts/item.md                # the item, with {{column}} placeholders
+  choice_description: "{description}"    # optional, fields of labels.csv
+  top_k: 5                               # candidates kept for top-k metrics and the report
+  max_workers: 16
+```
+
+A choice question accepts at most 255 options. With more labels, labelbench
+splits them into several questions of the same request, each with an extra
+option "none of these" (`none_description` sets its text), and combines the
+answers: a label from one part is likely if its part chooses it and every
+other part answers "none of these". Requests are cached like those of the
+LLM classifier.
+
 ## Writing a classifier
 
 A classifier is a Python class with a `predict` method. It receives a list of
@@ -313,6 +381,7 @@ params:
 | Field | Content |
 |---|---|
 | `label` | the predicted label, a list of labels for `type: multi`, or `None` if the classifier has no answer |
+| `probability` | probability between 0 and 1 that `label` is correct; reported only with `probability: true` |
 | `candidates` | further labels in ranked order, used for top-k metrics |
 | `raw` | the raw output, e.g. an LLM response including its reasoning, shown in the report |
 | `meta` | a dictionary with anything else worth keeping, such as tokens or runtime |
@@ -362,7 +431,7 @@ if the original task files have changed since:
 
 | File | Content |
 |---|---|
-| `predictions.csv` | one row per item with the predicted label, candidates, raw output and metadata |
+| `predictions.csv` | one row per item with the predicted label, its probability, candidates, raw output and metadata |
 | `metrics.json` | all metrics in machine-readable form |
 | `report.html` | the report, a single file that needs no server |
 | `task.yaml`, `labels.csv`, `gold.csv` | copies of the task, with `gold.csv` reduced to the evaluated items |

@@ -17,6 +17,9 @@ class Prediction:
     """The predicted label, or None if the classifier has no valid answer."""
     candidates: list[str] | None = None
     """Further labels in ranked order, used for top-k metrics."""
+    probability: float | None = None
+    """Probability (0 to 1) that `label` is correct. Only reported if the
+    config sets `probability: true`; see enable_probability() below."""
     raw: str = ""
     """Raw output, e.g. the LLM response including its reasoning."""
     meta: dict[str, Any] = field(default_factory=dict)
@@ -37,9 +40,17 @@ class TaskInfo:
 class Classifier(Protocol):
     def predict(self, items: list[dict[str, str]]) -> list[Prediction]: ...
 
+    # Optional:
+    #   prepare(task: TaskInfo)      called once before predict()
+    #   enable_probability()         called if the config sets probability: true;
+    #                                a classifier without it cannot deliver probabilities
+
 
 # Short names for classifiers shipped with labelbench, e.g. {"llm": "labelbench.llm:LLM"}.
-BUILTINS: dict[str, str] = {"llm": "labelbench.llm:LLMClassifier"}
+BUILTINS: dict[str, str] = {
+    "llm": "labelbench.llm:LLMClassifier",
+    "decision": "labelbench.decision:DecisionClassifier",
+}
 
 
 class ClassifierError(ValueError):

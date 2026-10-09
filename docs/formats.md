@@ -91,6 +91,7 @@ this adapter is planned.
 |--------------|----------|---------|
 | `id`         | yes      | item id from `gold.csv` |
 | `label`      | yes      | predicted label; JSON array for `type: multi`; empty if the classifier gave no valid answer |
+| `probability`| no       | probability between 0 and 1 that `label` is correct; filled only if the config sets `probability: true` |
 | `candidates` | no       | JSON array of labels in ranked order, for top-k metrics |
 | `raw`        | no       | raw classifier output, e.g. the LLM response including its reasoning |
 | `meta`       | no       | JSON object, e.g. `{"input_tokens": 812, "latency_ms": 940}` |

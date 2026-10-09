@@ -11,11 +11,14 @@ from math import comb
 from typing import Any
 
 import numpy as np
-from sklearn.metrics import cohen_kappa_score, f1_score, precision_recall_fscore_support
+from sklearn.metrics import cohen_kappa_score, f1_score, precision_recall_fscore_support, roc_auc_score
 
 from labelbench.task import INVALID
 
 N_BOOTSTRAP = 1000
+# Bins for the reliability table and thresholds for the coverage table (probability of the prediction)
+PROBABILITY_BINS = (0.0, 0.5, 0.7, 0.8, 0.9, 0.95, 1.0)
+PROBABILITY_THRESHOLDS = (0.0, 0.5, 0.7, 0.8, 0.9, 0.95, 0.99)
 MATRIX_MAX_CLASSES = 20
 TOP_K = (1, 3, 5)
 
@@ -28,6 +31,7 @@ def evaluate(
     level_gold: dict[str, list[str]] | None = None,
     candidates: list[list[str]] | None = None,
     weights: list[float] | None = None,
+    probabilities: list[float | None] | None = None,
     seed: int = 0,
 ) -> dict[str, dict[str, Any]]:
     """Metrics for the label itself (level "label") and every coarser level.
@@ -39,6 +43,9 @@ def evaluate(
     """
     level_gold = level_gold or {}
     results = {"label": level_metrics(gold, pred, candidates, weights, seed)}
+    if probabilities is not None:
+        correct = [g == p for g, p in zip(gold, pred, strict=True)]
+        results["label"]["probability"] = probability_metrics(correct, probabilities)
     for level, mapping in level_maps.items():
         g = level_gold.get(level) or [mapping[x] for x in gold]
         p = [mapping.get(x, INVALID) for x in pred]
@@ -99,6 +106,54 @@ def level_metrics(
         for a, b in zip(gold, pred, strict=True):
             matrix[index[a]][index[b]] += 1
         out["matrix"] = {"labels": all_classes, "counts": matrix}
+    return out
+
+
+def probability_metrics(correct: list[bool], probs: list[float | None]) -> dict[str, Any]:
+    """How well the classifier's probabilities match its actual accuracy.
+
+    Only items with a probability count. `bins` is a reliability table: within
+    each probability range, the mean stated probability against the share
+    that is actually correct; for a well calibrated classifier both agree.
+    `coverage` answers the practical question which accuracy one gets when
+    only predictions above a threshold are accepted and the rest is checked
+    by hand. ECE is the item-weighted mean gap between the two columns of
+    `bins`, the Brier score the mean squared gap per item (0 is perfect).
+    AUC measures discrimination instead: how well the probability separates
+    correct from wrong predictions (0.5 is chance, 1 perfect). A cautious
+    classifier can have a poor ECE and still a high AUC, which is what matters
+    when low-probability predictions are to be checked by hand.
+    """
+    pairs = [(float(p), bool(c)) for p, c in zip(probs, correct, strict=True) if p is not None]
+    out: dict[str, Any] = {"n": len(pairs), "n_missing": len(probs) - len(pairs)}
+    if not pairs:
+        return out
+    p = np.array([x[0] for x in pairs])
+    c = np.array([x[1] for x in pairs], dtype=float)
+    out["mean_probability"] = float(p.mean())
+    out["accuracy"] = float(c.mean())
+    out["brier"] = float(np.mean((p - c) ** 2))
+    out["auc"] = float(roc_auc_score(c, p)) if 0 < c.sum() < len(c) else None
+    bins, ece = [], 0.0
+    edges = PROBABILITY_BINS
+    for i, (lo, hi) in enumerate(zip(edges[:-1], edges[1:], strict=True)):
+        last = i == len(edges) - 2
+        mask = (p >= lo) & ((p <= hi) if last else (p < hi))
+        k = int(mask.sum())
+        row = {"from": lo, "to": hi, "n": k}
+        if k:
+            row["mean_probability"] = float(p[mask].mean())
+            row["accuracy"] = float(c[mask].mean())
+            ece += k / len(p) * abs(row["accuracy"] - row["mean_probability"])
+        bins.append(row)
+    out["bins"] = bins
+    out["ece"] = float(ece)
+    out["coverage"] = []
+    for t in PROBABILITY_THRESHOLDS:
+        mask = p >= t
+        k = int(mask.sum())
+        out["coverage"].append({"threshold": t, "n": k, "share": k / len(p),
+                                "accuracy": float(c[mask].mean()) if k else None})
     return out
 
 

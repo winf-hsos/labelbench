@@ -201,6 +201,26 @@ const STRINGS = {
     flagged: "Gold label doubtful",
     exportFlags: (n) => `Export marked items (${n}) as CSV`,
     exportXlsx: (n) => `as Excel`,
+    probability: "Probability",
+    probSection: "Probability of the predictions",
+    probExpl: "The classifier states for each prediction how likely it is to be correct. The tables show whether these statements can be trusted.",
+    probSelf: "These probabilities are the model's own estimate, not measured values.",
+    meanProb: "Mean probability",
+    ece: "Calibration error (ECE)",
+    eceExpl: "Average gap between stated probability and actual accuracy, weighted by the number of items; 0 means perfectly reliable.",
+    auc: "Discrimination (AUC)",
+    aucExpl: "How well the probability separates correct from wrong predictions; 0.5 is chance, 1 perfect. This decides how useful the probability is for picking items to check by hand.",
+    brier: "Brier score",
+    brierExpl: "Mean squared difference between probability and outcome (1 correct, 0 wrong); lower is better, 0 is perfect.",
+    probMissing: (n) => `No probability for ${n} items; they are left out here.`,
+    reliability: "Reliability",
+    reliabilityExpl: "Within each range: how sure the classifier was on average, and how often it was actually right. For a reliable classifier both columns agree.",
+    range: "Range", cases: "Items", actual: "Actually correct",
+    coverageTitle: "Accept only confident predictions",
+    coverageExpl: "If only predictions at or above a threshold are accepted and the rest is checked by hand: how many are accepted, and how many of them are correct.",
+    threshold: "Threshold", accepted: "Accepted", accAccepted: "Of these correct",
+    probFilter: "Probability", probBelow: (x) => `below ${x}`, probAtLeast: (x) => `${x} and above`,
+    order: "Order", orderGold: "as in gold standard", orderLow: "least certain first", orderHigh: "most certain first",
     flagHint: "Marks are stored in this browser only. Export them as CSV or Excel to pass them on.",
     noneMarked: "No items marked yet.",
     checksExpl: "Consistency checks of the label list and the gold standard, run on the complete task before this run. Errors block runs, warnings can distort results, notes are for information.",
@@ -260,6 +280,26 @@ const STRINGS = {
     flagged: "Gold-Label zweifelhaft",
     exportFlags: (n) => `Markierte Fälle (${n}) als CSV exportieren`,
     exportXlsx: (n) => `als Excel`,
+    probability: "Wahrscheinlichkeit",
+    probSection: "Wahrscheinlichkeit der Vorhersagen",
+    probExpl: "Der Klassifikator gibt zu jeder Vorhersage an, wie wahrscheinlich sie richtig ist. Die Tabellen zeigen, ob man diesen Angaben trauen kann.",
+    probSelf: "Diese Wahrscheinlichkeiten sind eine Selbsteinschätzung des Modells, keine gemessenen Werte.",
+    meanProb: "Mittlere Wahrscheinlichkeit",
+    ece: "Kalibrierungsfehler (ECE)",
+    eceExpl: "Mittlere Abweichung zwischen angegebener Wahrscheinlichkeit und tatsächlicher Trefferquote, gewichtet nach Fallzahl; 0 heißt vollkommen zuverlässig.",
+    auc: "Trennschärfe (AUC)",
+    aucExpl: "Wie gut die Wahrscheinlichkeit richtige von falschen Vorhersagen trennt; 0,5 ist Zufall, 1 perfekt. Davon hängt ab, wie nützlich sie ist, um Fälle für die Prüfung von Hand auszuwählen.",
+    brier: "Brier-Score",
+    brierExpl: "Mittlere quadrierte Abweichung zwischen Wahrscheinlichkeit und Ergebnis (1 richtig, 0 falsch); kleiner ist besser, 0 ist perfekt.",
+    probMissing: (n) => `Für ${n} Fälle fehlt eine Wahrscheinlichkeit; sie fehlen hier.`,
+    reliability: "Zuverlässigkeit",
+    reliabilityExpl: "Je Bereich: wie sicher sich der Klassifikator im Mittel war und wie oft er tatsächlich richtig lag. Bei einem zuverlässigen Klassifikator stimmen beide Spalten überein.",
+    range: "Bereich", cases: "Fälle", actual: "Tatsächlich richtig",
+    coverageTitle: "Nur sichere Vorhersagen übernehmen",
+    coverageExpl: "Werden nur Vorhersagen ab einer Schwelle übernommen und der Rest von Hand geprüft: wie viele übernommen werden und wie viele davon richtig sind.",
+    threshold: "Schwelle", accepted: "Übernommen", accAccepted: "Davon richtig",
+    probFilter: "Wahrscheinlichkeit", probBelow: (x) => `unter ${x}`, probAtLeast: (x) => `ab ${x}`,
+    order: "Reihenfolge", orderGold: "wie im Goldstandard", orderLow: "unsicherste zuerst", orderHigh: "sicherste zuerst",
     flagHint: "Markierungen werden nur in diesem Browser gespeichert. Zum Weitergeben als CSV oder Excel exportieren.",
     noneMarked: "Noch keine Fälle markiert.",
     checksExpl: "Konsistenzprüfungen von Labelliste und Goldstandard, ausgeführt auf der vollständigen Aufgabe vor diesem Lauf. Fehler verhindern Läufe, Warnungen können Ergebnisse verzerren, Hinweise dienen der Information.",
@@ -405,6 +445,7 @@ function renderOverview() {
     const m = lv[n];
     if (m.matrix) html += matrixHtml(n, m.matrix);
   }
+  if (lv.label.probability && lv.label.probability.n) html += probabilityHtml(lv.label.probability);
   html += `<h2>${T.confusions}: ${esc(T.exact)}</h2><p class="expl">${esc(T.confusionsExpl)}</p>`;
   html += pairsHtml("label", lv.label.confusions);
   for (const n of names.filter((x) => x !== "label" && !lv[x].matrix)) {
@@ -416,6 +457,24 @@ function renderOverview() {
     const [level, gold, pred] = JSON.parse(el.dataset.pair);
     openItems({ level, gold, pred, status: gold === pred ? "all" : "wrong" });
   }));
+}
+function probabilityHtml(pm) {
+  const selfReported = DATA.items.some((it) => String((it.meta || {}).probability_source || "").includes("self"));
+  let h = `<h2>${T.probSection}</h2><p class="expl">${esc(T.probExpl)}${selfReported ? " " + esc(T.probSelf) : ""}</p>`;
+  h += `<div class="tiles">` + [[T.meanProb, PCT(pm.mean_probability, 1), ""], [T.auc, F2(pm.auc), T.aucExpl], [T.ece, PCT(pm.ece, 1), T.eceExpl],
+    [T.brier, F2(pm.brier), T.brierExpl]].map(([n, v, e]) =>
+    `<div class="card tile"><div class="name">${esc(n)}</div><div class="value">${v}</div>${e ? `<div class="small">${esc(e)}</div>` : ""}</div>`).join("") + `</div>`;
+  if (pm.n_missing) h += `<p class="expl">${esc(T.probMissing(pm.n_missing))}</p>`;
+  h += `<h2>${T.reliability}</h2><p class="expl">${esc(T.reliabilityExpl)}</p><div class="card scroll"><table><thead><tr>
+    <th>${T.range}</th><th class="num">${T.cases}</th><th class="num">${T.meanProb}</th><th class="num">${T.actual}</th></tr></thead><tbody>` +
+    pm.bins.map((b) => `<tr><td>${PCT(b.from)} – ${PCT(b.to)}</td><td class="num">${b.n}</td>
+      <td class="num">${b.n ? PCT(b.mean_probability, 1) : "–"}</td><td class="num">${b.n ? PCT(b.accuracy, 1) : "–"}</td></tr>`).join("") +
+    `</tbody></table></div>`;
+  h += `<h2>${T.coverageTitle}</h2><p class="expl">${esc(T.coverageExpl)}</p><div class="card scroll"><table><thead><tr>
+    <th>${T.threshold}</th><th class="num">${T.accepted}</th><th class="num">${T.accAccepted}</th></tr></thead><tbody>` +
+    pm.coverage.map((c) => `<tr><td>≥ ${PCT(c.threshold)}</td><td class="num">${c.n} (${PCT(c.share)})</td>
+      <td class="num">${c.accuracy == null ? "–" : PCT(c.accuracy, 1)}</td></tr>`).join("") + `</tbody></table></div>`;
+  return h;
 }
 function matrixHtml(level, mx) {
   const labels = mx.labels;
@@ -497,10 +556,11 @@ function renderClasses() {
 }
 
 // ---------- items (run) ----------
-const F = { level: "label", status: "all", gold: "", pred: "", q: "", limit: PAGE };
+const F = { level: "label", status: "all", gold: "", pred: "", q: "", prob: "", order: "", limit: PAGE };
+const PROB_FILTERS = { lt50: [null, 0.5], lt70: [null, 0.7], lt90: [null, 0.9], ge90: [0.9, null] };
 let openId = null;
 function openItems(f) {
-  Object.assign(F, { level: "label", status: "all", gold: "", pred: "", q: "", limit: PAGE }, f);
+  Object.assign(F, { level: "label", status: "all", gold: "", pred: "", q: "", prob: "", order: "", limit: PAGE }, f);
   openId = null;
   show("items");
   renderItems();
@@ -519,8 +579,19 @@ function filteredItems() {
     if (F.gold && l.gold !== F.gold) return false;
     if (F.pred && l.pred !== F.pred) return false;
     if (q && !itemText(it).includes(q)) return false;
+    if (F.prob) {
+      const [lo, hi] = PROB_FILTERS[F.prob];
+      if (it.probability == null) return false;
+      if (lo != null && it.probability < lo) return false;
+      if (hi != null && it.probability >= hi) return false;
+    }
     return true;
   });
+}
+function orderedItems(rows) {
+  if (!F.order) return rows;
+  const dir = F.order === "low" ? 1 : -1;
+  return rows.slice().sort((a, b) => ((a.probability ?? 2) - (b.probability ?? 2)) * dir);
 }
 function featureCell(features) {
   const keys = Object.keys(features);
@@ -537,13 +608,17 @@ function detailHtml(it) {
   const levels = Object.entries(it.levels).map(([lv, v]) =>
     `<dt>${esc(levelName(lv))}</dt><dd>${T.col.gold}: ${labelHtml(v.gold)} · ${T.col.pred}: ${labelHtml(v.pred)} ${statusHtml(v.gold === v.pred)}</dd>`).join("");
   const show = Object.entries(it.show).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("");
-  const invalidNote = it.pred === INVALID && it.raw_label ? `<dt>${T.col.pred}</dt><dd>${esc(it.raw_label)}</dd>` : "";
+  const invalidNote = (it.pred === INVALID && it.raw_label ? `<dt>${T.col.pred}</dt><dd>${esc(it.raw_label)}</dd>` : "") +
+    (DATA.has_probability ? `<dt>${T.probability}</dt><dd>${it.probability == null ? "–" : PCT(it.probability, 1)}</dd>` : "");
   return `<div class="grid">
     <div><h4>${T.levels}</h4><dl class="kv">${invalidNote}${levels}</dl>
       ${show ? `<h4 style="margin-top:12px">${T.extra}</h4><dl class="kv">${show}</dl>` : ""}
       <p><button class="btn" data-flag="${esc(it.id)}">${FLAGS[it.id] ? "⚑ " + T.unflag : "⚐ " + T.flag}</button></p></div>
     <div><h4>${T.rawOutput}</h4><pre>${prettyRaw(it.raw)}</pre>
-      ${it.candidates && it.candidates.length ? `<h4 style="margin-top:12px">${T.candidates}</h4><ol>${it.candidates.map((c) => `<li>${esc(c)}</li>`).join("")}</ol>` : ""}
+      ${it.candidates && it.candidates.length ? `<h4 style="margin-top:12px">${T.candidates}</h4><ol>${it.candidates.map((c) => {
+        const cp = ((it.meta || {}).candidate_probabilities || {})[c];
+        return `<li>${esc(c)}${cp == null ? "" : ` <span class="small">(${PCT(cp, 1)})</span>`}</li>`;
+      }).join("")}</ol>` : ""}
       ${it.meta && Object.keys(it.meta).length ? `<h4 style="margin-top:12px">${T.meta}</h4><pre>${esc(JSON.stringify(it.meta, null, 2))}</pre>` : ""}</div>
     <div><h4>${T.features}</h4><dl class="kv">${Object.entries(it.features).map(([k, v]) => `<dt>${esc(k)}</dt><dd style="white-space:pre-line">${esc(v)}</dd>`).join("")}</dl></div>
   </div>`;
@@ -557,8 +632,13 @@ function renderItems() {
   const levels = Object.keys(DATA.metrics.levels);
   const golds = new Set(DATA.items.map((it) => it.levels[F.level].gold));
   const preds = new Set(DATA.items.map((it) => it.levels[F.level].pred));
-  const rows = filteredItems();
+  const rows = orderedItems(filteredItems());
   const nFlags = Object.keys(FLAGS).length;
+  const hasP = DATA.has_probability;
+  const probControls = hasP ? `<label>${T.probFilter} <select id="f-prob">${[["", T.any], ["lt50", T.probBelow("50 %")], ["lt70", T.probBelow("70 %")], ["lt90", T.probBelow("90 %")], ["ge90", T.probAtLeast("90 %")]]
+      .map(([v, l]) => `<option value="${v}"${v === F.prob ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></label>
+    <label>${T.order} <select id="f-order">${[["", T.orderGold], ["low", T.orderLow], ["high", T.orderHigh]]
+      .map(([v, l]) => `<option value="${v}"${v === F.order ? " selected" : ""}>${esc(l)}</option>`).join("")}</select></label>` : "";
   const showCols = DATA.task.show;
   sec.innerHTML = `<div class="controls">
       <label>${T.level} <select id="f-level">${levels.map((n) => `<option value="${esc(n)}"${n === F.level ? " selected" : ""}>${esc(levelName(n))}</option>`).join("")}</select></label>
@@ -567,6 +647,7 @@ function renderItems() {
       </select></label>
       <label>${T.goldLabel} <select id="f-gold">${optionList(golds, F.gold)}</select></label>
       <label>${T.predLabel} <select id="f-pred">${optionList(preds, F.pred)}</select></label>
+      ${probControls}
       <input type="search" id="f-q" placeholder="${esc(T.search)}" value="${esc(F.q)}">
       <button class="btn" id="f-reset">${T.reset}</button>
       <span class="count">${T.nItems(rows.length)}</span>
@@ -574,16 +655,16 @@ function renderItems() {
     <div class="controls"><button class="btn" id="f-export"${nFlags ? "" : " disabled"}>${T.exportFlags(nFlags)}</button>
       <button class="btn" id="f-export-xlsx"${nFlags ? "" : " disabled"}>${T.exportXlsx(nFlags)}</button>
       <span class="small" style="color:var(--muted)">${esc(T.flagHint)}</span></div>
-    <div class="card scroll"><table><thead><tr><th>${T.col.id}</th><th>${T.features}</th><th>${T.col.gold}</th><th>${T.col.pred}</th><th></th>
+    <div class="card scroll"><table><thead><tr><th>${T.col.id}</th><th>${T.features}</th><th>${T.col.gold}</th><th>${T.col.pred}</th>${hasP ? `<th class="num">${T.probability}</th>` : ""}<th></th>
       ${showCols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>
     ${rows.slice(0, F.limit).map((it) => {
       const l = it.levels[F.level];
       const open = openId === it.id;
       return `<tr class="item-row${open ? " open" : ""}${FLAGS[it.id] ? " flagged" : ""}" data-id="${esc(it.id)}">
         <td>${esc(it.id)}${FLAGS[it.id] ? ` <span class="flagmark" title="${esc(T.flagged)}">⚑</span>` : ""}</td>
-        <td>${featureCell(it.features)}</td><td>${labelHtml(l.gold)}</td><td>${labelHtml(l.pred)}</td><td>${statusHtml(l.gold === l.pred)}</td>
+        <td>${featureCell(it.features)}</td><td>${labelHtml(l.gold)}</td><td>${labelHtml(l.pred)}</td>${hasP ? `<td class="num">${it.probability == null ? "–" : PCT(it.probability, 1)}</td>` : ""}<td>${statusHtml(l.gold === l.pred)}</td>
         ${showCols.map((c) => `<td>${esc(it.show[c])}</td>`).join("")}</tr>
-        ${open ? `<tr class="detail"><td colspan="${5 + showCols.length}">${detailHtml(it)}</td></tr>` : ""}`;
+        ${open ? `<tr class="detail"><td colspan="${5 + (hasP ? 1 : 0) + showCols.length}">${detailHtml(it)}</td></tr>` : ""}`;
     }).join("")}
     </tbody></table></div>
     ${rows.length > F.limit ? `<div class="more"><button class="btn" id="f-more">${T.showMore(Math.min(PAGE, rows.length - F.limit))}</button></div>` : ""}`;
@@ -595,6 +676,10 @@ function renderItems() {
   $("#f-pred").addEventListener("change", (e) => rerender({ pred: e.target.value }));
   $("#f-q").addEventListener("input", (e) => { rerender({ q: e.target.value }); const q = $("#f-q"); q.focus(); q.setSelectionRange(q.value.length, q.value.length); });
   $("#f-reset").addEventListener("click", () => openItems({}));
+  if (hasP) {
+    $("#f-prob").addEventListener("change", (e) => rerender({ prob: e.target.value }));
+    $("#f-order").addEventListener("change", (e) => rerender({ order: e.target.value }));
+  }
   $("#f-export").addEventListener("click", exportFlags);
   $("#f-export-xlsx").addEventListener("click", exportFlagsXlsx);
   const more = $("#f-more");
@@ -614,9 +699,11 @@ function renderItems() {
 function flaggedTable() {
   const ids = new Set(Object.keys(FLAGS));
   const feats = DATA.task.features;
-  const header = ["id", ...feats, "gold", "prediction", "flagged_at", "run"];
+  const hasP = DATA.has_probability;
+  const header = ["id", ...feats, "gold", "prediction", ...(hasP ? ["probability"] : []), "flagged_at", "run"];
   const rows = DATA.items.filter((it) => ids.has(it.id)).map((it) =>
-    [it.id, ...feats.map((f) => it.features[f]), it.gold, it.pred, FLAGS[it.id], DATA.run_name].map((v) => String(v ?? "")));
+    [it.id, ...feats.map((f) => it.features[f]), it.gold, it.pred, ...(hasP ? [it.probability] : []), FLAGS[it.id], DATA.run_name]
+      .map((v) => String(v ?? "")));
   return { header, rows, wide: new Set(feats.map((_, i) => i + 1)) };
 }
 function download(blob, name) {

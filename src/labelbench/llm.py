@@ -12,11 +12,16 @@ Placeholders in double braces:
 The answer is a JSON object with the chosen `label` and, unless `reasoning`
 is false, a short `reasoning`. Where the provider allows it, the schema
 restricts `label` to the labels in labels.csv, so the model cannot invent one.
+
+With `probability: true` in the config the schema also asks for a
+`probability` of the chosen label. That number is the model's own estimate,
+not a measured probability; how well it matches reality shows the report.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -27,6 +32,26 @@ from typing import Any
 from labelbench.cache import JsonCache
 from labelbench.classifier import Prediction, TaskInfo
 from labelbench.providers import make_provider
+
+
+def render(template: str, item: dict[str, str], labels_text: str = "") -> str:
+    """Fill {{labels}} and {{<feature>}} placeholders; empty values become "-"."""
+    text = template.replace("{{labels}}", labels_text)
+    for key, value in item.items():
+        text = text.replace("{{" + key + "}}", (value or "").strip() or "-")
+    return text
+
+
+def check_placeholders(templates: dict[str, str | None], features: list[str]) -> None:
+    """Raise if a template uses a placeholder that is neither 'labels' nor a feature."""
+    known = {"labels", "id", *features}
+    for name, template in templates.items():
+        if template is None:
+            continue
+        unknown = sorted(set(re.findall(r"\{\{([^{}]+)\}\}", template)) - known)
+        if unknown:
+            raise ValueError(f"{name} uses placeholders {unknown} that are neither "
+                             f"'labels' nor feature columns {features}.")
 
 
 class LLMClassifier:
@@ -49,6 +74,11 @@ class LLMClassifier:
         self.provider = make_provider(provider, model, self.options)
         self.labels: list[str] = []
         self.label_text = ""
+        self.probability = False
+
+    def enable_probability(self) -> None:
+        """Ask the model for its own probability that the chosen label is correct."""
+        self.probability = True
 
     def prepare(self, task: TaskInfo) -> None:
         self.labels = [row["label"] for row in task.labels]
@@ -56,7 +86,8 @@ class LLMClassifier:
             self.label_text = "\n".join(self.label_line.format(**row) for row in task.labels)
         except KeyError as exc:
             raise ValueError(f"label_line uses {exc}, which is not a column of labels.csv.") from exc
-        self._check_placeholders(task.features)
+        check_placeholders({"prompt": self.item_template, "system_prompt": self.system_template},
+                           task.features)
 
     def predict(self, items: list[dict[str, str]]) -> list[Prediction]:
         if not self.labels:
@@ -79,22 +110,7 @@ class LLMClassifier:
     # --- internals ---------------------------------------------------------
 
     def _render(self, template: str, item: dict[str, str]) -> str:
-        text = template.replace("{{labels}}", self.label_text)
-        for key, value in item.items():
-            text = text.replace("{{" + key + "}}", (value or "").strip() or "-")
-        return text
-
-    def _check_placeholders(self, features: list[str]) -> None:
-        import re
-
-        known = {"labels", "id", *features}
-        for name, template in (("prompt", self.item_template), ("system_prompt", self.system_template)):
-            if template is None:
-                continue
-            unknown = sorted(set(re.findall(r"\{\{([^{}]+)\}\}", template)) - known)
-            if unknown:
-                raise ValueError(f"{name} uses placeholders {unknown} that are neither "
-                                 f"'labels' nor feature columns {features}.")
+        return render(template, item, self.label_text)
 
     def _schema(self) -> dict[str, Any]:
         label: dict[str, Any] = {"type": "string",
@@ -106,6 +122,10 @@ class LLMClassifier:
             properties["reasoning"] = {"type": "string",
                                        "description": "One or two sentences explaining the choice."}
         properties["label"] = label
+        if self.probability:
+            properties["probability"] = {
+                "type": "number",
+                "description": "Your probability from 0 to 1 that the chosen label is correct."}
         return {"type": "object", "properties": properties,
                 "required": list(properties), "additionalProperties": False}
 
@@ -134,5 +154,9 @@ class LLMClassifier:
             label = answer["label"]
         except (json.JSONDecodeError, KeyError, TypeError):
             return Prediction(label=None, raw=cached.get("text", ""), meta=meta)
+        probability = None
+        if self.probability and isinstance(answer.get("probability"), (int, float)):
+            probability = min(1.0, max(0.0, float(answer["probability"])))
+            meta["probability_source"] = "self-reported by the model"
         return Prediction(label=label if isinstance(label, str) else None,
-                          raw=cached["text"], meta=meta)
+                          probability=probability, raw=cached["text"], meta=meta)

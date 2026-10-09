@@ -17,7 +17,7 @@ from typing import Any
 
 from labelbench import __version__
 from labelbench.checks import Issue
-from labelbench.classifier import Prediction, TaskInfo, load_classifier
+from labelbench.classifier import ClassifierError, Prediction, TaskInfo, load_classifier
 from labelbench.io import (
     csv_columns,
     read_csv,
@@ -33,7 +33,7 @@ from labelbench.metrics import evaluate
 from labelbench.report import render_run_report, run_report_data
 from labelbench.task import INVALID, Task, TaskError, load_task
 
-PREDICTION_COLUMNS = ["id", "label", "candidates", "raw", "meta"]
+PREDICTION_COLUMNS = ["id", "label", "probability", "candidates", "raw", "meta"]
 
 
 def run(task_path: str | Path, clf_path: str | Path, *, split: str | None = None,
@@ -44,9 +44,7 @@ def run(task_path: str | Path, clf_path: str | Path, *, split: str | None = None
     rows = task.select(split)
 
     classifier, config = load_classifier(clf_path)
-    if hasattr(classifier, "prepare"):
-        classifier.prepare(TaskInfo(name=task.name, type=task.type, features=task.features,
-                                    labels=task.labels, levels=task.levels))
+    _setup(classifier, config, task)
     items = task.items(rows)
     started = time.perf_counter()
     predictions = _predict(classifier, items, config.get("batch_size"))
@@ -56,7 +54,8 @@ def run(task_path: str | Path, clf_path: str | Path, *, split: str | None = None
     _copy_task(task, rows, run_dir)
     write_yaml(run_dir / "config.yaml", config)
     write_csv(run_dir / "predictions.csv",
-              _prediction_rows(items, predictions, config.get("label_map") or {}),
+              _prediction_rows(items, predictions, config.get("label_map") or {},
+                               bool(config.get("probability"))),
               PREDICTION_COLUMNS)
     write_json(run_dir / "checks.json", [i.as_dict() for i in task.issues])
     write_json(run_dir / "provenance.json",
@@ -78,9 +77,7 @@ def predict(task_path: str | Path, items_path: str | Path, clf_path: str | Path,
         raise TaskError(f"Columns {absent} are missing in {items_path}.")
     rows = read_csv(items_path)
     classifier, config = load_classifier(clf_path)
-    if hasattr(classifier, "prepare"):
-        classifier.prepare(TaskInfo(name=task.name, type=task.type, features=task.features,
-                                    labels=task.labels, levels=task.levels))
+    _setup(classifier, config, task)
     items = task.items(rows)
     started = time.perf_counter()
     predictions = _predict(classifier, items, config.get("batch_size"))
@@ -89,7 +86,8 @@ def predict(task_path: str | Path, items_path: str | Path, clf_path: str | Path,
     out = _new_dir(Path(out_dir), f"predict_{task.name}_{Path(clf_path).stem}")
     write_yaml(out / "config.yaml", config)
     write_csv(out / "predictions.csv",
-              _prediction_rows(items, predictions, config.get("label_map") or {}),
+              _prediction_rows(items, predictions, config.get("label_map") or {},
+                               bool(config.get("probability"))),
               PREDICTION_COLUMNS)
     prov = _provenance(task, None, len(rows), clf_path, config, runtime)
     prov["items"] = {"path": str(Path(items_path).resolve()), "sha256": sha256_file(items_path)}
@@ -107,9 +105,14 @@ def evaluate_run_dir(run_dir: str | Path) -> dict[str, Any]:
     gold = [r[task.label_col] for r in rows]
     pred = [normalise(p["label"], task.label_set) for p in pred_rows]
     candidates = None
-    if any(p["candidates"] for p in pred_rows):
-        candidates = [[c for c in _json_list(p["candidates"]) if c in task.label_set]
+    if any(p.get("candidates") for p in pred_rows):
+        candidates = [[c for c in _json_list(p.get("candidates", "")) if c in task.label_set]
                       for p in pred_rows]
+    config = read_yaml(run_dir / "config.yaml")
+    probabilities = None
+    if config.get("probability"):
+        probabilities = [float(p["probability"]) if p.get("probability") else None
+                         for p in pred_rows]
     weights = [float(r[task.weight_col]) for r in rows] if task.weight_col else None
     level_maps = {lv: task.level_map(lv) for lv in task.levels}
     level_gold = {lv: [r[col] for r in rows] for lv, col in task.level_gold.items()}
@@ -120,7 +123,8 @@ def evaluate_run_dir(run_dir: str | Path) -> dict[str, Any]:
         "split": provenance["task"].get("split"),
         "n_items": len(rows),
         "levels": evaluate(gold, pred, level_maps=level_maps, level_gold=level_gold,
-                           candidates=candidates, weights=weights),
+                           candidates=candidates, weights=weights,
+                           probabilities=probabilities),
     }
     write_json(run_dir / "metrics.json", metrics)
 
@@ -128,7 +132,7 @@ def evaluate_run_dir(run_dir: str | Path) -> dict[str, Any]:
     issues = [Issue(**i) for i in read_json(checks_file)] if checks_file.is_file() else []
     data = run_report_data(
         run_name=run_dir.name, task=task, rows=rows, pred_rows=pred_rows, pred=pred,
-        metrics=metrics, provenance=provenance, config=read_yaml(run_dir / "config.yaml"),
+        metrics=metrics, provenance=provenance, config=config,
         issues=issues,
     )
     write_text_atomic(run_dir / "report.html", render_run_report(data))
@@ -156,6 +160,18 @@ def normalise(label: str, label_set: set[str]) -> str:
     return label if label in label_set else INVALID
 
 
+def _setup(classifier: Any, config: dict[str, Any], task: Task) -> None:
+    if config.get("probability"):
+        if not hasattr(classifier, "enable_probability"):
+            raise ClassifierError(
+                f"{config.get('classifier')} cannot deliver probabilities (it has no "
+                "enable_probability() method); remove 'probability: true' from the config.")
+        classifier.enable_probability()
+    if hasattr(classifier, "prepare"):
+        classifier.prepare(TaskInfo(name=task.name, type=task.type, features=task.features,
+                                    labels=task.labels, levels=task.levels))
+
+
 def _predict(classifier: Any, items: list[dict[str, str]], batch_size: int | None) -> list[Prediction]:
     size = batch_size or len(items) or 1
     out: list[Prediction] = []
@@ -171,9 +187,14 @@ def _predict(classifier: Any, items: list[dict[str, str]], batch_size: int | Non
 
 
 def _prediction_rows(items: list[dict[str, str]], predictions: list[Prediction],
-                     label_map: dict[str, str]) -> list[dict[str, str]]:
+                     label_map: dict[str, str], with_probability: bool) -> list[dict[str, str]]:
     rows = []
     for item, p in zip(items, predictions, strict=True):
+        probability = ""
+        if with_probability and p.probability is not None:
+            if not 0.0 <= float(p.probability) <= 1.0:
+                raise RuntimeError(f"Probability {p.probability} of item {item['id']} is not in [0, 1].")
+            probability = f"{float(p.probability):.6g}"
         meta = dict(p.meta)
         label = p.label
         if label is not None and label in label_map:
@@ -183,6 +204,7 @@ def _prediction_rows(items: list[dict[str, str]], predictions: list[Prediction],
         rows.append({
             "id": item["id"],
             "label": "" if label is None else str(label),
+            "probability": probability,
             "candidates": json.dumps(candidates, ensure_ascii=False) if candidates else "",
             "raw": p.raw,
             "meta": json.dumps(meta, ensure_ascii=False) if meta else "",

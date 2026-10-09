@@ -161,6 +161,12 @@ classifier templates (`init`, `new`, `templates`). Still open:
 3. The adapter for classifiers in other languages via `items.csv` /
    `predictions.csv`.
 
+Since then: probabilities per prediction (`probability: true` in the config,
+`enable_probability()` on the classifier) with discrimination, reliability
+and coverage in the report, and the built-in classifier `decision` for
+OpenAI's Decisions API, which splits label lists longer than 255 options
+into several questions.
+
 ## Templates and providers
 
 `labelbench init` and `labelbench new` copy files from `templates/` inside
