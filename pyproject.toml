@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "labelbench"
-version = "0.2.0"
+version = "0.3.0"
 description = "Evaluate interchangeable classifiers (rule-based or LLM) against a gold standard, with a self-contained HTML report."
 readme = "README.md"
 license = "MIT"

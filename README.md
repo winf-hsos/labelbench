@@ -1,13 +1,13 @@
-# labelbench
+# LabelBench
 
-labelbench evaluates classifiers against a gold standard and shows every
+LabelBench evaluates classifiers against a gold standard and shows every
 result in a self-contained HTML report that domain experts can browse row by
 row. The classifier is interchangeable, so a hand-written rule set and an LLM
 are run, evaluated and compared in exactly the same way, which makes it
 possible to see within minutes whether a change to a classifier helped and
 on which items it did not.
 
-> **Status: version 0.2.** Projects, tasks and classifiers are created from
+> **Status: version 0.3.** Projects, tasks and classifiers are created from
 > templates, and a built-in LLM classifier works with OpenAI, Anthropic,
 > OpenAI-compatible servers and any provider you connect yourself. Planned are
 > tasks with several labels per item (`type: multi`), agreement between
@@ -53,16 +53,19 @@ report into a new directory that is never overwritten afterwards.
 
 ## Installation
 
-labelbench requires Python 3.12 or newer. Create a folder for your project
-with its own virtual environment and install labelbench from GitHub:
+LabelBench requires Python 3.12 or newer. Create a folder for your project
+with its own virtual environment and install LabelBench from GitHub:
 
 ```bash
 python -m venv .venv
 ```
 
 ```bash
-.venv/Scripts/python -m pip install "labelbench[all] @ git+https://github.com/winf-hsos/labelbench"
+.venv/Scripts/python -m pip install "labelbench[all] @ https://github.com/winf-hsos/labelbench/archive/refs/heads/main.zip"
 ```
+
+This needs no Git. With Git installed, `"labelbench[all] @ git+https://github.com/winf-hsos/labelbench"`
+works as well and can pin a specific commit.
 
 On Linux and macOS the interpreter is `.venv/bin/python`. The extra `[all]`
 installs the clients for OpenAI and Anthropic; use `[openai]` or
@@ -80,7 +83,7 @@ labelbench init my-project --llm openai
 ```
 
 The example task routes 20 customer support messages to one of six topics.
-Its files show the format of every file labelbench needs, so the quickest way
+Its files show the format of every file LabelBench needs, so the quickest way
 to learn the format is to look at them.
 
 **2. Check the task and run the rule-based classifier:**
@@ -97,7 +100,7 @@ labelbench check --task tasks/example
 labelbench run --task tasks/example --clf configs/keywords-v1.yaml
 ```
 
-labelbench classifies all `dev` items, prints the main metrics and writes a
+LabelBench classifies all `dev` items, prints the main metrics and writes a
 new run directory such as `runs/20261009-101500_example_keywords-v1/`. Open
 the `report.html` inside it in any browser.
 
@@ -133,7 +136,7 @@ my-project/
 
 A run always combines **one task** with **one config**. The config names the
 classifier, which is either your code in `classifiers/` or the built-in LLM
-classifier with its prompts in `prompts/`. labelbench writes each run into a
+classifier with its prompts in `prompts/`. LabelBench writes each run into a
 new folder in `runs/`, together with copies of everything it was based on.
 
 Never change a prompt or config that was used in a run. Copy it to a new
@@ -163,7 +166,7 @@ spreadsheet program and CSV library does automatically. The full reference of
 
 ### Excel workbooks instead of CSV
 
-Gold standards are often maintained by domain experts in Excel. labelbench
+Gold standards are often maintained by domain experts in Excel. LabelBench
 reads `.xlsx` files directly; the file extension in `task.yaml` decides the
 format, and `file.xlsx#Sheet` selects a sheet. Gold standard and label list
 can therefore be two sheets of one workbook:
@@ -276,7 +279,7 @@ same for every item, typically the instructions and the label list, and the
 item prompt holds the item's features. Providers can cache the system part,
 which makes long label lists affordable. Placeholders use double braces:
 `{{labels}}` inserts the label list, rendered line by line with `label_line`,
-and `{{column}}` inserts a feature column of the item. labelbench refuses to
+and `{{column}}` inserts a feature column of the item. LabelBench refuses to
 run if a prompt uses a placeholder that is neither.
 
 **Answers** are JSON with a `label` and, unless `reasoning: false`, a short
@@ -297,7 +300,7 @@ per item, so such cases remain visible in the report.
 ## Probabilities
 
 Many classifiers know how sure they are. If the config sets
-`probability: true`, labelbench asks the classifier for the probability that
+`probability: true`, LabelBench asks the classifier for the probability that
 each predicted label is correct, stores it in `predictions.csv` and evaluates
 it in the report:
 
@@ -309,7 +312,7 @@ params: {...}
 
 A classifier that cannot deliver probabilities makes the run stop with an
 error, so a missing probability never goes unnoticed. Your own classifiers
-deliver them by implementing `enable_probability()`, which labelbench calls
+deliver them by implementing `enable_probability()`, which LabelBench calls
 when the config asks for probabilities, and by setting `Prediction.probability`
 to a number between 0 and 1.
 
@@ -353,7 +356,7 @@ params:
   max_workers: 16
 ```
 
-A choice question accepts at most 255 options. With more labels, labelbench
+A choice question accepts at most 255 options. With more labels, LabelBench
 splits them into several questions of the same request, each with an extra
 option "none of these" (`none_description` sets its text), and combines the
 answers: a label from one part is likely if its part chooses it and every
@@ -420,16 +423,16 @@ label_map: {veggie: vegetarian}
 params: {...}
 ```
 
-If the class has a method `prepare(task)`, labelbench calls it once before
+If the class has a method `prepare(task)`, LabelBench calls it once before
 `predict`. The argument tells the classifier the task's name, its feature
 columns, its levels and the full content of `labels.csv` as `task.labels`,
 but never the gold labels.
 
-For large jobs, the config may set `batch_size`; labelbench then calls
+For large jobs, the config may set `batch_size`; LabelBench then calls
 `predict` with chunks of that size and reports progress after each one. For
 expensive calls of your own, `labelbench.JsonCache` offers the same cache the
 LLM classifier uses. If a parameter of the config is the path of an existing
-file, such as a prompt template, labelbench records its checksum in
+file, such as a prompt template, LabelBench records its checksum in
 `provenance.json`, so every run documents exactly which files it used.
 
 ## Commands
@@ -503,7 +506,7 @@ example when the report is embedded in a dark presentation.
 
 If you improve a classifier many times against the same items, it ends up
 fitted to exactly those items, and its measured quality is too optimistic.
-labelbench therefore distinguishes two parts of the gold standard, marked in
+LabelBench therefore distinguishes two parts of the gold standard, marked in
 the `split` column:
 
 - `dev` items are used while developing, and `labelbench run` evaluates them
@@ -517,7 +520,7 @@ Without a `split` column, all items are evaluated.
 
 With many labels, a mistake between two similar labels matters less than one
 between unrelated labels. Additional columns in `labels.csv` assign each
-label to a coarser group, and labelbench evaluates every level separately:
+label to a coarser group, and LabelBench evaluates every level separately:
 
 ```csv
 label,description,group,diet
@@ -575,4 +578,4 @@ Comparing several annotators with each other (`annotators`) is planned.
 
 ## License
 
-labelbench is released under the [MIT License](LICENSE).
+LabelBench is released under the [MIT License](LICENSE).
