@@ -450,7 +450,10 @@ each number carries a short explanation of what it means.
   and the label pairs that were confused most often.
 - **Items** shows every item, not only the errors, with its features, the
   correct label, the predicted label and the raw classifier output. It can be
-  filtered by correct or wrong, by label and by free text.
+  filtered by correct or wrong, by label, by free text and, with probabilities,
+  by probability and sorted least certain first. The current view, that is
+  every item passing the filters in the current order, can be exported as CSV
+  or Excel file, including items not yet shown below "show more".
 - **Data checks** lists the findings of `labelbench check`, so readers see
   which problems of the gold standard may affect the numbers.
 - **Run details** shows the classifier configuration and the provenance of
@@ -459,11 +462,13 @@ each number carries a short explanation of what it means.
   runs per level and list the items that changed between them.
 
 Reviewers often notice that the gold label itself is wrong. Such rows can be
-marked as "gold label doubtful" in the item details and exported as CSV or as
-an Excel file, so the gold standard can be corrected afterwards. The Excel
-file has a frozen header, a filter on every column and wrapped feature texts;
-the report writes it itself, without any library or network access. The marks
-are stored in the reviewer's browser only, which is why the export exists.
+marked as "gold label doubtful" in the item details; the status filter "gold
+label doubtful" shows them, and exporting that view passes them on, so the
+gold standard can be corrected afterwards. The marks are stored in the
+reviewer's browser only, which is why the export matters. The Excel file has a
+frozen header, a filter on every column, wrapped texts and probabilities as
+numbers in percent format; the report writes it itself, without any library or
+network access.
 
 The language of the report is set with `language` in `task.yaml`; English
 and German are available.

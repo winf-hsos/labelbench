@@ -199,7 +199,7 @@ const STRINGS = {
     levels: "Levels", features: "Features", extra: "Additional columns",
     flag: "Mark gold label as doubtful", unflag: "Remove mark",
     flagged: "Gold label doubtful",
-    exportFlags: (n) => `Export marked items (${n}) as CSV`,
+    exportView: (n) => `Export view (${n} items) as CSV`,
     exportXlsx: (n) => `as Excel`,
     probability: "Probability",
     probSection: "Probability of the predictions",
@@ -221,7 +221,7 @@ const STRINGS = {
     threshold: "Threshold", accepted: "Accepted", accAccepted: "Of these correct",
     probFilter: "Probability", probBelow: (x) => `below ${x}`, probAtLeast: (x) => `${x} and above`,
     order: "Order", orderGold: "as in gold standard", orderLow: "least certain first", orderHigh: "most certain first",
-    flagHint: "Marks are stored in this browser only. Export them as CSV or Excel to pass them on.",
+    flagHint: "Exports contain all items of the current view, also those not yet shown below. Marks are stored in this browser only; to pass them on, filter by status “⚑ Gold label doubtful” and export.",
     noneMarked: "No items marked yet.",
     checksExpl: "Consistency checks of the label list and the gold standard, run on the complete task before this run. Errors block runs, warnings can distort results, notes are for information.",
     sev: { error: "Error", warning: "Warning", info: "Note" },
@@ -278,7 +278,7 @@ const STRINGS = {
     levels: "Ebenen", features: "Merkmale", extra: "Weitere Spalten",
     flag: "Gold-Label als zweifelhaft markieren", unflag: "Markierung entfernen",
     flagged: "Gold-Label zweifelhaft",
-    exportFlags: (n) => `Markierte Fälle (${n}) als CSV exportieren`,
+    exportView: (n) => `Ansicht (${n} Fälle) als CSV exportieren`,
     exportXlsx: (n) => `als Excel`,
     probability: "Wahrscheinlichkeit",
     probSection: "Wahrscheinlichkeit der Vorhersagen",
@@ -300,7 +300,7 @@ const STRINGS = {
     threshold: "Schwelle", accepted: "Übernommen", accAccepted: "Davon richtig",
     probFilter: "Wahrscheinlichkeit", probBelow: (x) => `unter ${x}`, probAtLeast: (x) => `ab ${x}`,
     order: "Reihenfolge", orderGold: "wie im Goldstandard", orderLow: "unsicherste zuerst", orderHigh: "sicherste zuerst",
-    flagHint: "Markierungen werden nur in diesem Browser gespeichert. Zum Weitergeben als CSV oder Excel exportieren.",
+    flagHint: "Exportiert werden alle Fälle der aktuellen Ansicht, auch die unten noch nicht angezeigten. Markierungen werden nur in diesem Browser gespeichert; zum Weitergeben nach Status „⚑ Gold-Label zweifelhaft“ filtern und exportieren.",
     noneMarked: "Noch keine Fälle markiert.",
     checksExpl: "Konsistenzprüfungen von Labelliste und Goldstandard, ausgeführt auf der vollständigen Aufgabe vor diesem Lauf. Fehler verhindern Läufe, Warnungen können Ergebnisse verzerren, Hinweise dienen der Information.",
     sev: { error: "Fehler", warning: "Warnung", info: "Hinweis" },
@@ -652,8 +652,8 @@ function renderItems() {
       <button class="btn" id="f-reset">${T.reset}</button>
       <span class="count">${T.nItems(rows.length)}</span>
     </div>
-    <div class="controls"><button class="btn" id="f-export"${nFlags ? "" : " disabled"}>${T.exportFlags(nFlags)}</button>
-      <button class="btn" id="f-export-xlsx"${nFlags ? "" : " disabled"}>${T.exportXlsx(nFlags)}</button>
+    <div class="controls"><button class="btn" id="f-export"${rows.length ? "" : " disabled"}>${T.exportView(rows.length)}</button>
+      <button class="btn" id="f-export-xlsx"${rows.length ? "" : " disabled"}>${T.exportXlsx(rows.length)}</button>
       <span class="small" style="color:var(--muted)">${esc(T.flagHint)}</span></div>
     <div class="card scroll"><table><thead><tr><th>${T.col.id}</th><th>${T.features}</th><th>${T.col.gold}</th><th>${T.col.pred}</th>${hasP ? `<th class="num">${T.probability}</th>` : ""}<th></th>
       ${showCols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>
@@ -680,8 +680,8 @@ function renderItems() {
     $("#f-prob").addEventListener("change", (e) => rerender({ prob: e.target.value }));
     $("#f-order").addEventListener("change", (e) => rerender({ order: e.target.value }));
   }
-  $("#f-export").addEventListener("click", exportFlags);
-  $("#f-export-xlsx").addEventListener("click", exportFlagsXlsx);
+  $("#f-export").addEventListener("click", () => exportView("csv"));
+  $("#f-export-xlsx").addEventListener("click", () => exportView("xlsx"));
   const more = $("#f-more");
   if (more) more.addEventListener("click", () => { F.limit += PAGE; renderItems(); });
   sec.querySelectorAll("tr.item-row").forEach((tr) => tr.addEventListener("click", () => {
@@ -695,16 +695,24 @@ function renderItems() {
     saveFlags(); renderTabs(); renderItems();
   }));
 }
-// ---------- export of marked items (CSV and Excel share one table) ----------
-function flaggedTable() {
-  const ids = new Set(Object.keys(FLAGS));
-  const feats = DATA.task.features;
-  const hasP = DATA.has_probability;
-  const header = ["id", ...feats, "gold", "prediction", ...(hasP ? ["probability"] : []), "flagged_at", "run"];
-  const rows = DATA.items.filter((it) => ids.has(it.id)).map((it) =>
-    [it.id, ...feats.map((f) => it.features[f]), it.gold, it.pred, ...(hasP ? [it.probability] : []), FLAGS[it.id], DATA.run_name]
-      .map((v) => String(v ?? "")));
-  return { header, rows, wide: new Set(feats.map((_, i) => i + 1)) };
+// ---------- export of the current view (CSV and Excel share one table) ----------
+// Exports every item that passes the current filters, in the current order,
+// including items not yet rendered below the "show more" button.
+function viewTable() {
+  const feats = DATA.task.features, showCols = DATA.task.show, hasP = DATA.has_probability;
+  const lvName = F.level === "label" ? "" : ` (${levelName(F.level)})`;
+  const header = [T.col.id, ...feats, ...showCols, T.col.gold + lvName, T.col.pred + lvName, T.status,
+                  ...(hasP ? [T.probability] : []), T.flagged, T.rawOutput, "run"];
+  const rows = orderedItems(filteredItems()).map((it) => {
+    const l = it.levels[F.level];
+    return [it.id, ...feats.map((f) => it.features[f]), ...showCols.map((c) => it.show[c]),
+            l.gold, l.pred, l.gold === l.pred ? T.right : T.wrong,
+            ...(hasP ? [it.probability] : []), FLAGS[it.id] || "", it.raw || "", DATA.run_name];
+  });
+  const at = (name) => header.indexOf(name);
+  const wide = new Set([...feats.map((_, i) => i + 1), at(T.rawOutput)]);
+  const percent = new Set(hasP ? [at(T.probability)] : []);
+  return { header, rows, wide, percent };
 }
 function download(blob, name) {
   const a = document.createElement("a");
@@ -713,32 +721,35 @@ function download(blob, name) {
   document.body.appendChild(a); a.click(); a.remove();
 }
 function csvCell(v) { const s = String(v ?? ""); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
-function exportFlags() {
-  const { header, rows } = flaggedTable();
-  const lines = [header, ...rows].map((r) => r.map(csvCell).join(","));
-  download(new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" }),
-           `${DATA.run_name}_gold_doubtful.csv`);
-}
-function exportFlagsXlsx() {
-  const { header, rows, wide } = flaggedTable();
-  download(new Blob([buildXlsx(header, rows, wide, "gold doubtful")],
-                    { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
-           `${DATA.run_name}_gold_doubtful.xlsx`);
+function exportView(format) {
+  const { header, rows, wide, percent } = viewTable();
+  if (format === "csv") {
+    const lines = [header, ...rows].map((r) => r.map(csvCell).join(","));
+    download(new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" }), `${DATA.run_name}_items.csv`);
+  } else {
+    download(new Blob([buildXlsx(header, rows, { wide, percent }, T.tabs.items)],
+                      { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+             `${DATA.run_name}_items.xlsx`);
+  }
 }
 
 /* A minimal .xlsx writer: an xlsx file is a ZIP archive of a few XML parts.
- * All cells are inline strings; the header is bold and frozen, every column
- * has a filter, and the columns in `wide` are broad and wrap their text. */
-function buildXlsx(header, rows, wide, sheetName) {
+ * Numbers become numeric cells, everything else inline strings; the header is
+ * bold and frozen, every column has a filter, the columns in `wide` are broad
+ * and wrap their text, and the columns in `percent` are formatted as 0.0 %. */
+function buildXlsx(header, rows, { wide = new Set(), percent = new Set() } = {}, sheetName = "data") {
   const xmlEsc = (s) => String(s)
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")   // characters XML does not allow
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const col = (i) => { let s = ""; for (i += 1; i > 0; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + (i - 1) % 26) + s; return s; };
-  const cell = (v, r, c, style) =>
-    `<c r="${col(c)}${r}" t="inlineStr"${style ? ` s="${style}"` : ""}><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`;
+  const cell = (v, r, c, style) => {
+    if (v === null || v === undefined || v === "") return "";
+    if (typeof v === "number" && Number.isFinite(v)) return `<c r="${col(c)}${r}"${style ? ` s="${style}"` : ""}><v>${v}</v></c>`;
+    return `<c r="${col(c)}${r}" t="inlineStr"${style ? ` s="${style}"` : ""}><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`;
+  };
   const all = [header, ...rows];
   const sheetRows = all.map((row, r) =>
-    `<row r="${r + 1}">${row.map((v, c) => cell(v, r + 1, c, r === 0 ? 1 : (wide.has(c) ? 2 : 0))).join("")}</row>`).join("");
+    `<row r="${r + 1}">${row.map((v, c) => cell(v, r + 1, c, r === 0 ? 1 : (wide.has(c) ? 2 : (percent.has(c) ? 3 : 0)))).join("")}</row>`).join("");
   const cols = header.map((_, c) => `<col min="${c + 1}" max="${c + 1}" width="${wide.has(c) ? 50 : 22}" customWidth="1"/>`).join("");
   const last = `${col(header.length - 1)}${all.length}`;
   const NS = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
@@ -759,13 +770,16 @@ function buildXlsx(header, rows, wide, sheetName) {
       `<Relationship Id="rId1" Type="${REL}/worksheet" Target="worksheets/sheet1.xml"/>` +
       `<Relationship Id="rId2" Type="${REL}/styles" Target="styles.xml"/></Relationships>`,
     "xl/styles.xml": `${head}<styleSheet ${NS}>` +
+      // the schema fixes the order: numFmts, fonts, fills, borders, cellStyleXfs, cellXfs, cellStyles
+      '<numFmts count="1"><numFmt numFmtId="164" formatCode="0.0%"/></numFmts>' +
       '<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>' +
       '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>' +
       '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
       '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-      '<cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+      '<cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
       '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
-      '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf></cellXfs>' +
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>' +
+      '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs>' +
       '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>',
     "xl/worksheets/sheet1.xml": `${head}<worksheet ${NS}><sheetViews><sheetView workbookViewId="0">` +
       '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' +
