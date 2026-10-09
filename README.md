@@ -397,6 +397,10 @@ reviewer's browser only, which is why the export exists.
 The language of the report is set with `language` in `task.yaml`; English
 and German are available.
 
+The report follows the light or dark setting of the viewer's system.
+Appending `?theme=dark` or `?theme=light` to its address overrides that, for
+example when the report is embedded in a dark presentation.
+
 ## Working with dev and test
 
 If you improve a classifier many times against the same items, it ends up

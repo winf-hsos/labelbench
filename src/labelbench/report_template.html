@@ -151,6 +151,9 @@ pre { white-space: pre-wrap; word-break: break-word; margin: 0; font: 12.5px/1.4
 <script>
 "use strict";
 const DATA = JSON.parse(document.getElementById("data").textContent);
+// ?theme=dark or ?theme=light overrides the system setting, e.g. when the report is embedded
+const THEME = new URLSearchParams(location.search).get("theme");
+if (THEME === "dark" || THEME === "light") document.documentElement.dataset.theme = THEME;
 const INVALID = "__invalid__";
 const PAGE = 200;
 
