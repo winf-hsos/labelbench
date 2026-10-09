@@ -161,6 +161,28 @@ quotes and line breaks as long as they are quoted correctly, which every
 spreadsheet program and CSV library does automatically. The full reference of
 `task.yaml` is at the [end of this README](#all-settings-in-taskyaml).
 
+### Excel workbooks instead of CSV
+
+Gold standards are often maintained by domain experts in Excel. labelbench
+reads `.xlsx` files directly; the file extension in `task.yaml` decides the
+format, and `file.xlsx#Sheet` selects a sheet. Gold standard and label list
+can therefore be two sheets of one workbook:
+
+```yaml
+gold: dishes.xlsx#Dishes
+labels: dishes.xlsx#Standard dishes
+labels_column: Standard dish       # the label list's column with the labels
+```
+
+`labelbench new task tickets --format xlsx` creates such a workbook with the
+sheets `gold` and `labels`. The first row of a sheet holds the column names;
+columns without a name and empty rows are ignored. Cell values are read as
+text: whole numbers without decimals (`32839`, not `32839.0`), dates as
+`2026-10-09`, empty cells as empty text. Formulas are read with the value
+Excel last calculated, so a workbook should be saved in Excel before a run.
+Run directories always hold CSV copies of the task, whatever the source
+format.
+
 ## Checking a task
 
 Gold standards that were built by hand almost always contain inconsistencies,
@@ -415,7 +437,7 @@ file, such as a prompt template, labelbench records its checksum in
 | Command | Purpose |
 |---|---|
 | `labelbench init [DIR] [--llm PROVIDER] [--model M]` | create a project with an example task, a rule-based and optionally an LLM classifier |
-| `labelbench new task NAME` | create an empty task in `tasks/NAME` |
+| `labelbench new task NAME [--format xlsx]` | create an empty task in `tasks/NAME`, as CSV files or as one Excel workbook |
 | `labelbench new classifier NAME --template rules [--task T]` | create a rule-based classifier, pre-filled from task T |
 | `labelbench new classifier NAME --provider P [--model M] [--task T]` | create an LLM classifier for provider P (implies `--template llm`) |
 | `labelbench templates` | list classifier templates, LLM providers and their default models |
@@ -532,8 +554,9 @@ level_gold: {diet: diet_of_item}   # column in gold.csv
 | `type` | yes | `single`; `multi` is planned |
 | `id`, `label` | yes | columns with the item id and the gold label |
 | `features` | yes | columns the classifier may see; the first is shown as the item's title in the report |
-| `labels` | yes | file with the label list, relative to the task directory |
-| `gold` | no | file with the gold standard, default `gold.csv` |
+| `labels` | yes | label list relative to the task directory: a CSV file or `file.xlsx#Sheet` |
+| `labels_column` | no | column of the label list that holds the labels, default `label` |
+| `gold` | no | gold standard: a CSV file or `file.xlsx#Sheet`, default `gold.csv` |
 | `description` | no | one or two sentences shown at the top of every report |
 | `levels` | no | columns of `labels.csv` that hold coarser levels |
 | `level_gold` | no | per-item gold values for levels, `{level: column}` |

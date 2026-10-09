@@ -33,6 +33,8 @@ def main(argv: list[str] | None = None) -> int:
     new = p.add_subparsers(dest="kind", required=True)
     q = new.add_parser("task", help="create an empty task in tasks/NAME")
     q.add_argument("name")
+    q.add_argument("--format", choices=["csv", "xlsx"], default="csv",
+                   help="two CSV files (default) or one Excel workbook with sheets gold and labels")
     q = new.add_parser("classifier", help="create a classifier config (and code or prompts)")
     q.add_argument("name")
     q.add_argument("--template", choices=TEMPLATES,
@@ -94,9 +96,9 @@ def cmd_new(args: argparse.Namespace) -> int:
     from labelbench.scaffold import new_classifier, new_task
 
     if args.kind == "task":
-        files = new_task(".", args.name)
+        files = new_task(".", args.name, args.format)
         _print_created(files, Path("."))
-        print("\nFill labels.csv and gold.csv, adjust task.yaml, then run:")
+        print("\nFill the label list and the gold standard, adjust task.yaml, then run:")
         print(f"  labelbench check --task tasks/{args.name}")
         return 0
     template = args.template or ("llm" if args.provider else None)

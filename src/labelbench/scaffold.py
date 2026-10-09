@@ -11,7 +11,7 @@ from importlib import resources
 from pathlib import Path
 
 from labelbench import __version__
-from labelbench.io import csv_columns, read_yaml
+from labelbench.io import read_table, read_yaml, table_columns, table_file
 
 TEMPLATES = ("rules", "llm")
 PROVIDERS = ("openai", "anthropic", "openai-compatible", "custom")
@@ -74,14 +74,51 @@ def init_project(directory: str | Path, llm: str | None = None,
     return _write(files)
 
 
-def new_task(root: str | Path, name: str) -> list[Path]:
+TASK_FORMATS = ("csv", "xlsx")
+
+
+def new_task(root: str | Path, name: str, fmt: str = "csv") -> list[Path]:
+    """Create an empty task: two CSV files, or one Excel workbook with the
+    sheets 'gold' and 'labels', which is easier to maintain for domain experts."""
     _check_name(name)
+    if fmt not in TASK_FORMATS:
+        raise ScaffoldError(f"Unknown format {fmt!r}; available: {', '.join(TASK_FORMATS)}.")
     task_dir = Path(root) / "tasks" / name
-    files = {task_dir / "task.yaml": _template("task/task.yaml", name=name,
-                                               path=f"tasks/{name}")}
-    files[task_dir / "labels.csv"] = _template("task/labels.csv")
-    files[task_dir / "gold.csv"] = _template("task/gold.csv")
+    if fmt == "csv":
+        labels, gold = "labels.csv", "gold.csv"
+    else:
+        labels, gold = f"{name}.xlsx#labels", f"{name}.xlsx#gold"
+    files: dict[Path, str | bytes] = {task_dir / "task.yaml": _template(
+        "task/task.yaml", name=name, path=f"tasks/{name}", labels=labels, gold=gold)}
+    if fmt == "csv":
+        files[task_dir / "labels.csv"] = _template("task/labels.csv")
+        files[task_dir / "gold.csv"] = _template("task/gold.csv")
+    else:
+        files[task_dir / f"{name}.xlsx"] = _empty_workbook(
+            {"gold": ["id", "text", "label"], "labels": ["label", "description"]})
     return _write(files)
+
+
+def _empty_workbook(sheets: dict[str, list[str]]) -> bytes:
+    import io
+
+    import openpyxl
+    from openpyxl.styles import Font
+    from openpyxl.utils import get_column_letter
+
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+    for title, header in sheets.items():
+        ws = wb.create_sheet(title)
+        ws.append(header)
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+        ws.freeze_panes = "A2"
+        for i in range(1, len(header) + 1):
+            ws.column_dimensions[get_column_letter(i)].width = 30
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
 
 
 def new_classifier(root: str | Path, name: str, template: str, provider: str | None = None,
@@ -123,11 +160,14 @@ class _TaskInfo:
         self.name = str(spec.get("name", path.name))
         self.description = str(spec.get("description") or "")
         self.features = list(spec.get("features") or [])
-        labels_file = path / spec.get("labels", "labels.csv")
-        self.label_columns = csv_columns(labels_file) if labels_file.is_file() else ["label"]
-        from labelbench.io import read_csv
-
-        self.labels = [r["label"] for r in read_csv(labels_file)] if labels_file.is_file() else []
+        labels_spec = path / spec.get("labels", "labels.csv")
+        col = str(spec.get("labels_column", "label"))
+        self.label_columns, self.labels = ["label"], []
+        if table_file(labels_spec).is_file():
+            columns = table_columns(labels_spec)
+            # prompts address the label as {label}, whatever the column is called
+            self.label_columns = columns if "label" in columns else ["label", *columns]
+            self.labels = [r[col] for r in read_table(labels_spec) if r.get(col)]
 
 
 class _ExampleTask(_TaskInfo):
@@ -196,13 +236,16 @@ def _check_name(name: str) -> None:
                             "starting with a letter.")
 
 
-def _write(files: dict[Path, str]) -> list[Path]:
+def _write(files: dict[Path, str | bytes]) -> list[Path]:
     existing = [p for p in files if p.exists()]
     if existing:
         shown = "\n  ".join(str(p) for p in existing)
         raise ScaffoldError(f"Nothing was written, because these files already exist:\n  {shown}")
-    for path, text in files.items():
+    for path, content in files.items():
         path.parent.mkdir(parents=True, exist_ok=True)
+        if isinstance(content, bytes):
+            path.write_bytes(content)
+            continue
         with path.open("w", encoding="utf-8", newline="\n") as fh:
-            fh.write(text)
+            fh.write(content)
     return list(files)

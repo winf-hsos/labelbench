@@ -1,4 +1,4 @@
-# Task created by `labelbench new task`. Fill labels.csv and gold.csv, adjust
+# Task created by `labelbench new task`. Fill the label list and the gold standard, adjust
 # the column names below, then check the task with
 #   labelbench check --task @@path@@
 name: @@name@@
@@ -6,8 +6,10 @@ description: ""                 # one or two sentences, shown on every report
 type: single                    # one label per item
 id: id                          # column of gold.csv with a unique id per item
 features: [text]                # columns the classifier may see
-label: label                    # column of gold.csv with the correct label
-labels: labels.csv              # one row per allowed label, column "label" required
+label: label                    # column of the gold standard with the correct label
+gold: @@gold@@                  # the gold standard: a CSV file or file.xlsx#Sheet
+labels: @@labels@@              # one row per allowed label: a CSV file or file.xlsx#Sheet
+# labels_column: label          # column of the label list that holds the labels
 
 # Optional settings, remove the "#" to use them:
 # split: split                  # column with dev (for iterating) or test (held out)

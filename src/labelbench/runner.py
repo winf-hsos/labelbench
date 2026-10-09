@@ -8,7 +8,6 @@ can be re-evaluated, re-reported and compared without the original files.
 from __future__ import annotations
 
 import json
-import shutil
 import sys
 import time
 from datetime import datetime
@@ -19,8 +18,10 @@ from labelbench import __version__
 from labelbench.checks import Issue
 from labelbench.classifier import ClassifierError, Prediction, TaskInfo, load_classifier
 from labelbench.io import (
-    csv_columns,
     read_csv,
+    read_table,
+    table_columns,
+    table_file,
     read_json,
     read_yaml,
     sha256_file,
@@ -71,11 +72,11 @@ def predict(task_path: str | Path, items_path: str | Path, clf_path: str | Path,
             out_dir: str | Path) -> Path:
     """Classify unlabelled items with exactly the classifier used in evaluation."""
     task = load_task(task_path, strict=False)
-    columns = csv_columns(items_path)
+    columns = table_columns(items_path)
     absent = [c for c in [task.id_col, *task.features] if c not in columns]
     if absent:
         raise TaskError(f"Columns {absent} are missing in {items_path}.")
-    rows = read_csv(items_path)
+    rows = read_table(items_path)
     classifier, config = load_classifier(clf_path)
     _setup(classifier, config, task)
     items = task.items(rows)
@@ -90,7 +91,7 @@ def predict(task_path: str | Path, items_path: str | Path, clf_path: str | Path,
                                bool(config.get("probability"))),
               PREDICTION_COLUMNS)
     prov = _provenance(task, None, len(rows), clf_path, config, runtime)
-    prov["items"] = {"path": str(Path(items_path).resolve()), "sha256": sha256_file(items_path)}
+    prov["items"] = {"path": str(Path(items_path).resolve()), "sha256": sha256_file(table_file(items_path))}
     write_json(out / "provenance.json", prov)
     return out
 
@@ -232,12 +233,17 @@ def _new_dir(parent: Path, name: str) -> Path:
 
 
 def _copy_task(task: Task, rows: list[dict[str, str]], run_dir: Path) -> None:
+    """Copies of the task in the run directory are always CSV, whatever the source format."""
     spec = dict(task.spec)
     spec["labels"] = "labels.csv"
     spec["gold"] = "gold.csv"
+    spec["labels_column"] = "label"
     write_yaml(run_dir / "task.yaml", spec)
-    shutil.copyfile(task.labels_file, run_dir / "labels.csv")
-    write_csv(run_dir / "gold.csv", rows, csv_columns(task.gold_file))
+    label_columns = table_columns(task.labels_file)
+    if "label" not in label_columns:
+        label_columns = ["label", *label_columns]
+    write_csv(run_dir / "labels.csv", task.labels, label_columns)
+    write_csv(run_dir / "gold.csv", rows, table_columns(task.gold_file))
 
 
 def _provenance(task: Task, split: str | None, n_items: int, clf_path: str | Path,
@@ -257,9 +263,10 @@ def _provenance(task: Task, split: str | None, n_items: int, clf_path: str | Pat
             "n_items": n_items,
             "sha256": {
                 "task.yaml": sha256_file(task.root / "task.yaml"),
-                "labels.csv": sha256_file(task.labels_file),
-                "gold.csv": sha256_file(task.gold_file),
+                "labels": sha256_file(table_file(task.labels_file)),
+                "gold": sha256_file(table_file(task.gold_file)),
             },
+            "sources": {"labels": str(task.spec["labels"]), "gold": str(task.spec.get("gold", "gold.csv"))},
         },
         "classifier": {
             "config": str(Path(clf_path).resolve()),

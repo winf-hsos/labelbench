@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from labelbench.checks import Issue, run_checks
-from labelbench.io import csv_columns, read_csv, read_yaml
+from labelbench.io import read_table, read_yaml, table_columns, table_file
 
 INVALID = "__invalid__"
 """Reserved class for predictions that are empty or not part of the label schema."""
@@ -79,11 +79,18 @@ class Task:
 
     @property
     def labels_file(self) -> Path:
+        """Table spec of the label list: a CSV file or 'file.xlsx#Sheet'."""
         return self.root / self.spec["labels"]
 
     @property
     def gold_file(self) -> Path:
+        """Table spec of the gold standard: a CSV file or 'file.xlsx#Sheet'."""
         return self.root / self.spec.get("gold", "gold.csv")
+
+    @property
+    def labels_column(self) -> str:
+        """Column of the label list that holds the labels, 'label' by default."""
+        return str(self.spec.get("labels_column", "label"))
 
     @property
     def errors(self) -> list[Issue]:
@@ -143,25 +150,43 @@ def _check_spec(task: Task) -> None:
 
 def _read_labels(task: Task) -> list[dict[str, str]]:
     path = task.labels_file
-    if not path.is_file():
-        raise TaskError(f"{path} not found.")
-    columns = csv_columns(path)
-    if "label" not in columns:
-        raise TaskError(f"{path} needs a column named 'label'.")
+    columns = _columns(path)
+    col = task.labels_column
+    if col not in columns:
+        raise TaskError(f"{path} needs a column named {col!r} (set labels_column in task.yaml).")
     absent = [lv for lv in task.levels if lv not in columns]
     if absent:
         raise TaskError(f"Levels {absent} are not columns of {path}.")
-    return read_csv(path)
+    rows = _rows(path)
+    if col != "label":
+        # everything downstream addresses the label as row["label"]
+        for r in rows:
+            r["label"] = r[col]
+    return rows
 
 
 def _read_gold(task: Task) -> list[dict[str, str]]:
     path = task.gold_file
-    if not path.is_file():
-        raise TaskError(f"{path} not found.")
     needed = [task.id_col, task.label_col, *task.features, *task.show, *task.level_gold.values()]
     needed += [c for c in (task.weight_col, task.split_col) if c]
-    columns = csv_columns(path)
+    columns = _columns(path)
     absent = [c for c in needed if c not in columns]
     if absent:
         raise TaskError(f"Columns {absent} named in task.yaml are missing in {path}.")
-    return read_csv(path)
+    return _rows(path)
+
+
+def _columns(spec: Path) -> list[str]:
+    if not table_file(spec).is_file():
+        raise TaskError(f"{table_file(spec)} not found.")
+    try:
+        return table_columns(spec)
+    except ValueError as exc:
+        raise TaskError(str(exc)) from exc
+
+
+def _rows(spec: Path) -> list[dict[str, str]]:
+    try:
+        return read_table(spec)
+    except ValueError as exc:
+        raise TaskError(str(exc)) from exc

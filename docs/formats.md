@@ -5,6 +5,14 @@ The evaluator and the report read only these files, so any classifier that
 writes a valid `predictions.csv` can be evaluated, whatever language it is
 written in.
 
+Task tables (gold standard, label list, unlabelled items) can be CSV files
+or sheets of Excel workbooks; the extension decides, and `file.xlsx#Sheet`
+selects a sheet (the first sheet otherwise). In a sheet the first row holds
+the column names, unnamed columns and empty rows are ignored, and all values
+are read as text: whole numbers without decimals, dates as ISO dates, empty
+cells as empty text, formulas as their last calculated value. Files that
+labelbench writes (predictions, run copies of the task) are always CSV.
+
 All CSV files are UTF-8, comma-separated and quoted according to RFC 4180.
 Text fields may contain commas, quotes and line breaks, so they must always be
 read with a real CSV parser (Python's `csv` module, pandas, `readr`) and never
@@ -34,12 +42,13 @@ type: single                   # single | multi
 id: unit_id                    # column in gold.csv, unique
 features: [name, category, notes]   # columns passed to the classifier
 label: label                   # column holding the gold label
-labels: labels.csv             # label schema, see below
+labels: labels.csv             # label schema, see below; or file.xlsx#Sheet
+labels_column: label           # optional: column of the label list with the labels
 levels: [group, diet]          # optional: coarser levels, columns in labels.csv
 
 level_gold: {diet: diet_item}  # optional: per-item gold value for a level
 
-gold: gold.csv                 # optional, default gold.csv
+gold: gold.csv                 # optional, default gold.csv; or file.xlsx#Sheet
 weight: n_entries              # optional: frequency weight per row
 split: split                   # optional: column with dev / test
 show: [comment]                # optional: shown in the report, never given to classifiers
