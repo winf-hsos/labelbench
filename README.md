@@ -420,3 +420,7 @@ Comparing several annotators with each other (`annotators`) is planned.
 - [docs/formats.md](docs/formats.md) specifies every file format exactly.
 - [docs/design.md](docs/design.md) explains the architecture and design
   decisions.
+
+## License
+
+labelbench is released under the [MIT License](LICENSE).

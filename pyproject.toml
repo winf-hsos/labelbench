@@ -7,6 +7,8 @@ name = "labelbench"
 version = "0.1.0"
 description = "Evaluate interchangeable classifiers (rule-based or LLM) against a gold standard, with a self-contained HTML report."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
     "pyyaml",

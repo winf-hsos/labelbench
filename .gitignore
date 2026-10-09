@@ -16,3 +16,7 @@ dist/
 # Run outputs and LLM cache belong to the project that uses labelbench
 runs/
 .labelbench-cache/
+
+# Local instructions for Claude Code, not part of the project
+CLAUDE.md
+.claude/
