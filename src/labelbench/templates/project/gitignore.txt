@@ -1,0 +1,15 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# Secrets: API keys belong in environment variables, never in this repository
+.env
+.env.*
+
+# Cached LLM responses; can be large and are reproducible from the configs
+.labelbench-cache/
+
+# Runs are the evidence for your results and are kept by default.
+# Uncomment the next line to keep them out of version control.
+# runs/

@@ -34,7 +34,7 @@ classifier runs with which parameters is defined in a config file, so a
 changed prompt is a new file rather than a code change:
 
 ```yaml
-classifier: llm                        # built-in short name (planned), or
+classifier: llm                        # built-in short name, or
 # classifier: mypkg.rules:PaperRules   # any importable class
 label_map: {}                          # classifier output -> task labels
 params:                                # passed unchanged to the constructor
@@ -149,13 +149,29 @@ problems may affect it.
 
 ## Status
 
-Version 0.1 implements task loading with checks, the runner, metrics with
+Version 0.2 implements task loading with checks, the runner, metrics with
 levels, per-item level gold, weights, top-k and bootstrap intervals, `compare`
-with the McNemar test, the HTML report in English and German, `predict` and
-the response cache for classifiers. Still open:
+with the McNemar test, the HTML report in English and German, `predict`, the
+built-in LLM classifier with providers for OpenAI, Anthropic,
+OpenAI-compatible servers and custom functions, and project, task and
+classifier templates (`init`, `new`, `templates`). Still open:
 
 1. `type: multi` for several labels per item.
 2. Agreement between several annotators as a reference line.
-3. A built-in LLM classifier.
-4. The adapter for classifiers in other languages via `items.csv` /
+3. The adapter for classifiers in other languages via `items.csv` /
    `predictions.csv`.
+
+## Templates and providers
+
+`labelbench init` and `labelbench new` copy files from `templates/` inside
+the package and fill in a few placeholders (`@@name@@`), never overwriting an
+existing file. Templates contain no domain knowledge beyond the neutral
+example task; with `--task`, labels and feature columns of an existing task
+pre-fill them.
+
+The built-in LLM classifier keeps provider differences in
+`labelbench/providers/`, one module per API, each with a single `complete`
+method that returns the model's JSON text. Prompt rendering, the JSON schema
+that restricts the answer to the label list, caching, parallelism and parsing
+are shared, so every provider is evaluated under identical conditions. API
+keys are read from environment variables only.

@@ -1,0 +1,13 @@
+# Example task created by `labelbench init`: route customer support messages
+# to a topic. Replace it with your own data, or create an empty task with
+#   labelbench new task NAME
+name: example
+description: Route customer support messages to the right topic.
+type: single
+id: id                          # column with a unique id per item
+features: [subject, message]    # columns the classifier may see
+label: label                    # column with the correct label
+labels: labels.csv              # the allowed labels
+levels: [department]            # coarser level, a column of labels.csv
+split: split                    # dev items for iterating, test items held out
+language: en                    # report language: en or de

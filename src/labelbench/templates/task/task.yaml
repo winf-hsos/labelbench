@@ -1,0 +1,18 @@
+# Task created by `labelbench new task`. Fill labels.csv and gold.csv, adjust
+# the column names below, then check the task with
+#   labelbench check --task @@path@@
+name: @@name@@
+description: ""                 # one or two sentences, shown on every report
+type: single                    # one label per item
+id: id                          # column of gold.csv with a unique id per item
+features: [text]                # columns the classifier may see
+label: label                    # column of gold.csv with the correct label
+labels: labels.csv              # one row per allowed label, column "label" required
+
+# Optional settings, remove the "#" to use them:
+# split: split                  # column with dev (for iterating) or test (held out)
+# levels: [group]               # columns of labels.csv with coarser levels
+# level_gold: {group: group}    # gold.csv column with an item's own value on a level
+# weight: weight                # column with a non-negative weight per item
+# show: [comment]               # columns shown in the report, never given to classifiers
+language: en                    # report language: en or de

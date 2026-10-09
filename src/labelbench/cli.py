@@ -1,4 +1,4 @@
-"""Command line interface: labelbench check | run | compare | report | predict."""
+"""Command line interface: labelbench init | new | templates | check | run | compare | report | predict."""
 
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ from pathlib import Path
 from labelbench.checks import SEVERITIES
 from labelbench.classifier import ClassifierError
 from labelbench.io import read_json
+from labelbench.providers import ProviderError
+from labelbench.scaffold import PROVIDERS, TEMPLATES, ScaffoldError
 from labelbench.task import TaskError, load_task
 
 ICONS = {"error": "x", "warning": "!", "info": "i"}
@@ -21,6 +23,24 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(prog="labelbench", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("init", help="create a new project with an example task")
+    p.add_argument("directory", nargs="?", default=".")
+    p.add_argument("--llm", choices=PROVIDERS, help="also create an LLM classifier for this provider")
+    p.add_argument("--model", help="model name for --llm (default depends on the provider)")
+
+    p = sub.add_parser("new", help="create a task or a classifier from a template")
+    new = p.add_subparsers(dest="kind", required=True)
+    q = new.add_parser("task", help="create an empty task in tasks/NAME")
+    q.add_argument("name")
+    q = new.add_parser("classifier", help="create a classifier config (and code or prompts)")
+    q.add_argument("name")
+    q.add_argument("--template", required=True, choices=TEMPLATES)
+    q.add_argument("--provider", choices=PROVIDERS, help="LLM provider, for --template llm")
+    q.add_argument("--model", help="model name, for --template llm")
+    q.add_argument("--task", help="existing task whose features and labels pre-fill the template")
+
+    sub.add_parser("templates", help="list classifier templates and LLM providers")
 
     p = sub.add_parser("check", help="check a task for consistency problems")
     p.add_argument("--task", required=True)
@@ -49,9 +69,60 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return COMMANDS[args.command](args)
-    except (TaskError, ClassifierError) as exc:
+    except (TaskError, ClassifierError, ScaffoldError, ProviderError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
+
+
+def cmd_init(args: argparse.Namespace) -> int:
+    from labelbench.scaffold import init_project
+
+    files = init_project(args.directory, llm=args.llm, model=args.model)
+    _print_created(files, Path(args.directory))
+    print("\nNext steps:")
+    if args.directory != ".":
+        print(f"  cd {args.directory}")
+    print("  labelbench check --task tasks/example")
+    print("  labelbench run --task tasks/example --clf configs/keywords-v1.yaml")
+    if args.llm:
+        print("  labelbench run --task tasks/example --clf configs/llm-v1.yaml")
+    return 0
+
+
+def cmd_new(args: argparse.Namespace) -> int:
+    from labelbench.scaffold import new_classifier, new_task
+
+    if args.kind == "task":
+        files = new_task(".", args.name)
+        _print_created(files, Path("."))
+        print("\nFill labels.csv and gold.csv, adjust task.yaml, then run:")
+        print(f"  labelbench check --task tasks/{args.name}")
+        return 0
+    files = new_classifier(".", args.name, args.template, provider=args.provider,
+                           model=args.model, task=args.task)
+    _print_created(files, Path("."))
+    config = next(f for f in files if f.suffix == ".yaml")
+    task = args.task or "tasks/NAME"
+    print("\nAdjust the files, then run:")
+    print(f"  labelbench run --task {task} --clf {config.as_posix()}")
+    return 0
+
+
+def cmd_templates(args: argparse.Namespace) -> int:
+    from labelbench.scaffold import describe_templates
+
+    print(describe_templates())
+    return 0
+
+
+def _print_created(files: list[Path], root: Path) -> None:
+    print("Created:")
+    for f in files:
+        try:
+            shown = f.relative_to(root)
+        except ValueError:
+            shown = f
+        print(f"  {shown.as_posix()}")
 
 
 def cmd_check(args: argparse.Namespace) -> int:
@@ -129,6 +200,9 @@ def _print_metrics(run_dir: Path) -> None:
 
 
 COMMANDS = {
+    "init": cmd_init,
+    "new": cmd_new,
+    "templates": cmd_templates,
     "check": cmd_check,
     "run": cmd_run,
     "compare": cmd_compare,

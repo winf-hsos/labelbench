@@ -1,0 +1,8 @@
+# Rule-based classifier: the first label whose keywords occur in the text wins.
+# Copy this file to a new version before changing it, so earlier runs stay
+# reproducible.
+classifier: classifiers.@@module@@:KeywordClassifier
+params:
+  fallback: null        # label when no keyword matches; null counts as invalid
+  keywords:
+@@keywords@@

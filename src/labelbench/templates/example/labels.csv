@@ -1,0 +1,7 @@
+label,description,department
+invoice_question,Questions about an invoice or a charge,finance
+refund_request,"Asks for money back, including cancellations with refund",finance
+login_problem,"Cannot sign in: password, two-factor or locked account",it
+bug_report,Something in the product does not work as expected,it
+delivery_status,Asks where an order is or when it arrives,logistics
+address_change,Wants to change a delivery or billing address,logistics

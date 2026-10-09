@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "labelbench"
-version = "0.1.0"
+version = "0.2.0"
 description = "Evaluate interchangeable classifiers (rule-based or LLM) against a gold standard, with a self-contained HTML report."
 readme = "README.md"
 license = "MIT"
@@ -20,7 +20,9 @@ dependencies = [
 labelbench = "labelbench.cli:main"
 
 [project.optional-dependencies]
-llm = ["anthropic"]
+openai = ["openai"]
+anthropic = ["anthropic"]
+all = ["openai", "anthropic"]
 dev = ["pytest", "ruff"]
 
 [tool.hatch.build.targets.wheel]

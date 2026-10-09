@@ -7,21 +7,24 @@ are run, evaluated and compared in exactly the same way, which makes it
 possible to see within minutes whether a change to a classifier helped and
 on which items it did not.
 
-> **Status: version 0.1.** `check`, `run`, `compare`, `report` and `predict`
-> work for single-label tasks. Planned but not yet implemented are tasks with
-> several labels per item (`type: multi`), a built-in LLM classifier and an
-> adapter for classifiers in other languages; sections that describe them say
-> so. [docs/design.md](docs/design.md) contains the architecture.
+> **Status: version 0.2.** Projects, tasks and classifiers are created from
+> templates, and a built-in LLM classifier works with OpenAI, Anthropic,
+> OpenAI-compatible servers and any provider you connect yourself. Planned are
+> tasks with several labels per item (`type: multi`), agreement between
+> several annotators and an adapter for classifiers in other languages.
+> [docs/design.md](docs/design.md) contains the architecture.
 
 ## Contents
 
 - [How it works](#how-it-works)
 - [Installation](#installation)
-- [What you need](#what-you-need)
 - [Quickstart](#quickstart)
+- [The project folders](#the-project-folders)
+- [Creating your own task](#creating-your-own-task)
 - [Checking a task](#checking-a-task)
+- [Classifiers from templates](#classifiers-from-templates)
+- [The LLM classifier](#the-llm-classifier)
 - [Writing a classifier](#writing-a-classifier)
-- [Using an LLM as classifier](#using-an-llm-as-classifier)
 - [Commands](#commands)
 - [The report](#the-report)
 - [Working with dev and test](#working-with-dev-and-test)
@@ -48,121 +51,113 @@ report into a new directory that is never overwritten afterwards.
 
 ## Installation
 
-labelbench requires Python 3.12 or newer and is not yet published on PyPI.
-Install it into the virtual environment of the project that uses it:
+labelbench requires Python 3.12 or newer. Create a folder for your project
+with its own virtual environment and install labelbench from GitHub:
 
 ```bash
 python -m venv .venv
 ```
 
 ```bash
-.venv/Scripts/python -m pip install -e path/to/labelbench
+.venv/Scripts/python -m pip install "labelbench[all] @ git+https://github.com/winf-hsos/labelbench"
 ```
 
-On Linux and macOS the interpreter is `.venv/bin/python`. Installing makes
-the `labelbench` command available inside the environment. Libraries your
-own classifiers need, such as an LLM client, are installed the same way.
-
-## What you need
-
-labelbench is used from your own project directory. A typical layout:
-
-```
-my-project/
-├── tasks/
-│   └── diet/
-│       ├── task.yaml      required: describes the task
-│       ├── labels.csv     required: the allowed labels
-│       └── gold.csv       required: items with their correct label
-├── configs/
-│   ├── keyword-rules.yaml one file per classifier variant
-│   └── llm-v1.yaml
-├── prompts/
-│   └── diet-v1.md         only for LLM classifiers
-├── my_rules.py            only for your own Python classifiers
-└── runs/                  created by labelbench
-```
-
-| File | Required | Purpose |
-|---|---|---|
-| `task.yaml` | yes | names the columns for id, features and label, and points to `labels.csv` |
-| `labels.csv` | yes | one row per allowed label, optionally with a description and coarser levels |
-| `gold.csv` | yes | one row per item with id, features and the correct label |
-| classifier config | yes | which classifier runs with which parameters |
-| classifier code | for your own classifiers | a Python class, see [Writing a classifier](#writing-a-classifier) |
-| prompt file | for LLMs | prompt template read by your LLM classifier |
-
-All CSV files are UTF-8 and comma-separated. Text fields may contain commas,
-quotes and line breaks as long as they are quoted correctly, which every
-spreadsheet program and CSV library does automatically.
+On Linux and macOS the interpreter is `.venv/bin/python`. The extra `[all]`
+installs the clients for OpenAI and Anthropic; use `[openai]` or
+`[anthropic]` for only one of them, or no extra for rule-based classifiers
+only. Installing makes the `labelbench` command available inside the
+environment; activate it, or call `.venv/Scripts/labelbench` directly.
 
 ## Quickstart
 
-This example classifies canteen meals into four dietary categories.
-
-**1. Describe the task** in `tasks/diet/task.yaml`:
-
-```yaml
-name: diet
-type: single              # one label per item; "multi" for several
-id: id                    # column with a unique id per item
-features: [name, notes]   # columns the classifier may see
-label: label              # column with the correct label
-labels: labels.csv
-split: split              # optional, see "Working with dev and test"
-```
-
-**2. List the allowed labels** in `tasks/diet/labels.csv`:
-
-```csv
-label,description
-vegan,"No animal products at all"
-vegetarian,"No meat or fish, but may contain dairy or eggs"
-meat,"Contains meat"
-fish,"Contains fish or seafood, but no meat"
-```
-
-**3. Provide the gold standard** in `tasks/diet/gold.csv`:
-
-```csv
-id,name,notes,label,split
-1,"Spaghetti Bolognese","Rind",meat,dev
-2,"Gemüsecurry mit Reis","vegan",vegan,dev
-3,"Seelachsfilet mit Kartoffeln","Fisch",fish,test
-4,"Käsespätzle","Milch, Ei",vegetarian,dev
-```
-
-**4. Choose a classifier** in `configs/keyword-rules.yaml` (the class itself
-is shown in the next section):
-
-```yaml
-classifier: my_rules:KeywordRules
-params:
-  meat_words: [rind, schwein, hähnchen, wurst]
-  fish_words: [fisch, lachs, seelachs]
-```
-
-**5. Run and evaluate:**
+**1. Create a project** with an example task, a rule-based classifier and,
+optionally, an LLM classifier:
 
 ```bash
-labelbench run --task tasks/diet --clf configs/keyword-rules.yaml
+labelbench init my-project --llm openai
 ```
 
-labelbench first checks the task (see the next section) and refuses to run
-if it finds errors. It then classifies all `dev` items, prints the main
-metrics and writes a new run directory such as
-`runs/20261009-101500_diet_keyword-rules/`. Open the `report.html` inside it
-in any browser.
+The example task routes 20 customer support messages to one of six topics.
+Its files show the format of every file labelbench needs, so the quickest way
+to learn the format is to look at them.
 
-**6. Change something and compare.** After editing the classifier or creating
-a second config, run again and compare both runs:
+**2. Check the task and run the rule-based classifier:**
 
 ```bash
-labelbench compare runs/20261009-101500_diet_keyword-rules runs/20261009-103200_diet_keyword-rules
+cd my-project
+```
+
+```bash
+labelbench check --task tasks/example
+```
+
+```bash
+labelbench run --task tasks/example --clf configs/keywords-v1.yaml
+```
+
+labelbench classifies all `dev` items, prints the main metrics and writes a
+new run directory such as `runs/20261009-101500_example_keywords-v1/`. Open
+the `report.html` inside it in any browser.
+
+**3. Run the LLM classifier.** It needs an API key in the environment
+variable named in its config, here `OPENAI_API_KEY`:
+
+```bash
+labelbench run --task tasks/example --clf configs/llm-v1.yaml
+```
+
+**4. Compare the two runs** item by item:
+
+```bash
+labelbench compare runs/<rules-run> runs/<llm-run>
 ```
 
 The comparison lists the items that became correct, those that became wrong,
 and whether the difference is larger than chance would explain.
+
+## The project folders
+
+```
+my-project/
+├── tasks/              one folder per task          ─┐
+│   └── example/        task.yaml, labels.csv,         │ what is classified
+│                       gold.csv                      ─┘
+├── classifiers/        your Python code              ─┐
+├── prompts/            prompt templates               │ how it is classified
+├── configs/            one file per variant          ─┘
+├── runs/               written by labelbench           the results
+└── .labelbench-cache/  cached LLM answers              never edited
+```
+
+A run always combines **one task** with **one config**. The config names the
+classifier, which is either your code in `classifiers/` or the built-in LLM
+classifier with its prompts in `prompts/`. labelbench writes each run into a
+new folder in `runs/`, together with copies of everything it was based on.
+
+Never change a prompt or config that was used in a run. Copy it to a new
+version (`llm-v2.yaml`, `llm-v2-system.md`) and change the copy, so that every
+run stays reproducible and two versions can be compared with `compare`. Run
+all commands from the project folder, because classifiers and prompts are
+found relative to it.
+
+## Creating your own task
+
+```bash
+labelbench new task tickets
+```
+
+This creates `tasks/tickets/` with three files:
+
+| File | Content |
+|---|---|
+| `task.yaml` | names the columns for id, features and label; every optional setting is listed as a comment |
+| `labels.csv` | one row per allowed label in column `label`, optionally a `description` and coarser levels |
+| `gold.csv` | one row per item with id, feature columns and the correct label |
+
+All CSV files are UTF-8 and comma-separated. Text fields may contain commas,
+quotes and line breaks as long as they are quoted correctly, which every
+spreadsheet program and CSV library does automatically. The full reference of
+`task.yaml` is at the [end of this README](#all-settings-in-taskyaml).
 
 ## Checking a task
 
@@ -171,7 +166,7 @@ and some of them distort every evaluation without being visible in the
 numbers. `labelbench check` looks for them before any classifier runs:
 
 ```bash
-labelbench check --task tasks/diet
+labelbench check --task tasks/tickets
 ```
 
 Each finding has one of three severities. **Errors** make an evaluation
@@ -195,42 +190,123 @@ unreliable, and `labelbench run` refuses to start until they are fixed.
 
 `--all` lists up to 25 cases per finding instead of five.
 
+## Classifiers from templates
+
+`labelbench templates` lists what is available. A new classifier is created
+with `labelbench new classifier NAME --template ...`; with `--task`, the
+template is pre-filled with that task's labels and feature columns.
+
+**Rule-based**: a Python class that assigns the first label whose keywords
+occur in the text, with the keywords in the config. Extend the class with any
+rules you need. This command creates `classifiers/rules.py` and
+`configs/rules-v1.yaml`:
+
+```bash
+labelbench new classifier rules --template rules --task tasks/tickets
+```
+
+**LLM**: the built-in LLM classifier with a provider of your choice. This
+command creates `configs/claude-v1.yaml`, `prompts/claude-v1-system.md` and
+`prompts/claude-v1-item.md`:
+
+```bash
+labelbench new classifier claude --template llm --provider anthropic --task tasks/tickets
+```
+
+`--model` sets the model; without it the template uses the provider's default
+shown by `labelbench templates`.
+
+## The LLM classifier
+
+The built-in classifier `llm` sends one request per item, restricts the
+answer to the labels in `labels.csv` and caches every answer. Its config
+looks like this:
+
+```yaml
+classifier: llm
+params:
+  provider: anthropic                       # see the table below
+  model: claude-opus-5-5                    # any model name of the provider
+  system_prompt: prompts/claude-v1-system.md
+  prompt: prompts/claude-v1-item.md
+  label_line: "- {label}: {description}"    # how one label appears in {{labels}}
+  reasoning: true                           # ask for a short justification
+  max_workers: 8                            # parallel requests
+  options:                                  # passed to the provider
+    effort: low
+```
+
+| Provider | For | Important options |
+|---|---|---|
+| `openai` | OpenAI models via the Responses API | `api_key_env` (default `OPENAI_API_KEY`), `reasoning_effort`, `max_output_tokens` |
+| `anthropic` | Claude models via the Messages API | `effort`, `max_tokens`, `fallbacks`, `api_key_env` (by default the SDK finds `ANTHROPIC_API_KEY` itself) |
+| `openai-compatible` | any server with an OpenAI-style API, e.g. a local model server | `base_url` (required), `api_key_env`, `json_schema: false` if the server lacks structured output |
+| `module:function` | any other provider, through your own function | everything under `options` is passed to the function |
+
+`--provider custom` creates such a function in `classifiers/` with
+instructions. It receives the rendered prompts, the JSON schema and the model
+name, and returns the model's answer as JSON text.
+
+**Prompts** are two templates. The system prompt holds everything that is the
+same for every item, typically the instructions and the label list, and the
+item prompt holds the item's features. Providers can cache the system part,
+which makes long label lists affordable. Placeholders use double braces:
+`{{labels}}` inserts the label list, rendered line by line with `label_line`,
+and `{{column}}` inserts a feature column of the item. labelbench refuses to
+run if a prompt uses a placeholder that is neither.
+
+**Answers** are JSON with a `label` and, unless `reasoning: false`, a short
+`reasoning`. Where the provider supports it, the JSON schema restricts `label`
+to the labels in `labels.csv`, so the model cannot invent one. The report shows
+the reasoning next to each item, and the metadata records tokens, latency and
+the model that actually answered.
+
+**Caching**: every answer is stored in `.labelbench-cache/` under a hash of
+provider, model, options and both rendered prompts. Repeating a run costs
+nothing, and after a prompt change only the affected requests are sent again.
+API keys are only ever read from environment variables, never from configs.
+
+With `fallbacks: default`, Anthropic re-runs a request that a model's safety
+classifier declined on a fallback model. The model that answered is recorded
+per item, so such cases remain visible in the report.
+
 ## Writing a classifier
 
 A classifier is a Python class with a `predict` method. It receives a list of
 items, each a dictionary with the `id` and the feature columns as strings,
-and returns one `Prediction` per item in the same order.
+and returns one `Prediction` per item in the same order. The class created by
+the `rules` template is a good starting point; in short:
 
 ```python
-# my_rules.py
 from labelbench import Prediction
 
 
-class KeywordRules:
-    def __init__(self, meat_words: list[str], fish_words: list[str]):
-        self.meat_words = meat_words
-        self.fish_words = fish_words
+class KeywordClassifier:
+    def __init__(self, keywords: dict[str, list[str]], fallback: str | None = None):
+        self.keywords = keywords
+        self.fallback = fallback
 
     def predict(self, items: list[dict]) -> list[Prediction]:
         predictions = []
         for item in items:
-            text = f"{item['name']} {item['notes']}".lower()
-            if any(word in text for word in self.meat_words):
-                label = "meat"
-            elif any(word in text for word in self.fish_words):
-                label = "fish"
-            elif "vegan" in text:
-                label = "vegan"
-            else:
-                label = "vegetarian"
-            predictions.append(Prediction(label=label))
+            text = " ".join(v for k, v in item.items() if k != "id").lower()
+            hits = [label for label, words in self.keywords.items()
+                    if any(w in text for w in words)]
+            predictions.append(Prediction(label=hits[0] if hits else self.fallback))
         return predictions
 ```
 
-Everything under `params` in the config is passed to the constructor, so one
-class can be evaluated with different parameters without touching the code.
-The value of `classifier` is `module:Class`; modules in the directory you run
-labelbench from are found automatically.
+The config names the class as `module:Class` and passes everything under
+`params` to the constructor, so one class can be evaluated with different
+parameters without touching the code:
+
+```yaml
+classifier: classifiers.rules:KeywordClassifier
+params:
+  fallback: null
+  keywords:
+    refund_request: [refund, money back]
+```
 
 `Prediction` has four fields, of which only `label` is required:
 
@@ -248,7 +324,7 @@ translate them with a `label_map` in the config instead of changing the
 classifier:
 
 ```yaml
-classifier: my_rules:KeywordRules
+classifier: classifiers.rules:KeywordClassifier
 label_map: {veggie: vegetarian}
 params: {...}
 ```
@@ -256,51 +332,23 @@ params: {...}
 If the class has a method `prepare(task)`, labelbench calls it once before
 `predict`. The argument tells the classifier the task's name, its feature
 columns, its levels and the full content of `labels.csv` as `task.labels`,
-but never the gold labels. A classifier that needs the list of allowed labels,
-such as an LLM classifier that puts them into its prompt, takes it from there.
+but never the gold labels.
 
 For large jobs, the config may set `batch_size`; labelbench then calls
-`predict` with chunks of that size and reports progress after each one.
-
-## Using an LLM as classifier
-
-An LLM classifier is written like any other classifier. A typical one reads a
-prompt template in its constructor, fills in the label list in `prepare` and
-sends one request per item in `predict`. Writing the classifier yourself keeps
-the choice of provider, model and prompt technique in your hands; a built-in
-LLM classifier is planned.
-
-Two practices pay off in every LLM classifier:
-
-- **Restrict the answer to the label list.** Most providers accept a JSON
-  schema whose `enum` contains the allowed labels, so the model cannot invent
-  a label. Keep the list in `labels.csv` and build the prompt from it, so that
-  renaming a label changes prompt, evaluation and report consistently.
-- **Cache the responses.** `labelbench.JsonCache` stores each response under
-  a hash of model, prompt and parameters. A second run then only sends items
-  whose prompt or input changed, and repeating a run costs nothing.
-
-```python
-from labelbench import JsonCache, Prediction
-
-cache = JsonCache(".labelbench-cache")
-key = JsonCache.key(model=model, prompt=prompt)
-response = cache.get(key)
-if response is None:
-    response = call_the_model(prompt)      # your API call
-    cache.put(key, response)
-```
-
-Put the model's explanation into `Prediction.raw` and tokens or latency into
-`Prediction.meta`; both appear in the report next to each item. If a
-parameter of the config is the path of an existing file, such as a prompt
-template, labelbench records its checksum in `provenance.json`, so every run
-documents exactly which prompt it used.
+`predict` with chunks of that size and reports progress after each one. For
+expensive calls of your own, `labelbench.JsonCache` offers the same cache the
+LLM classifier uses. If a parameter of the config is the path of an existing
+file, such as a prompt template, labelbench records its checksum in
+`provenance.json`, so every run documents exactly which files it used.
 
 ## Commands
 
 | Command | Purpose |
 |---|---|
+| `labelbench init [DIR] [--llm PROVIDER] [--model M]` | create a project with an example task, a rule-based and optionally an LLM classifier |
+| `labelbench new task NAME` | create an empty task in `tasks/NAME` |
+| `labelbench new classifier NAME --template rules\|llm [--provider P] [--model M] [--task T]` | create a classifier from a template, pre-filled from task T |
+| `labelbench templates` | list classifier templates, LLM providers and their default models |
 | `labelbench check --task T` | check task T for consistency problems |
 | `labelbench run --task T --clf C` | classify the `dev` items of task T (all items if it has no splits) with classifier C and evaluate |
 | `labelbench run ... --split test` | evaluate on the held-out `test` items (logged) |

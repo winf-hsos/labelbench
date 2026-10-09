@@ -39,7 +39,7 @@ class Classifier(Protocol):
 
 
 # Short names for classifiers shipped with labelbench, e.g. {"llm": "labelbench.llm:LLM"}.
-BUILTINS: dict[str, str] = {}
+BUILTINS: dict[str, str] = {"llm": "labelbench.llm:LLMClassifier"}
 
 
 class ClassifierError(ValueError):

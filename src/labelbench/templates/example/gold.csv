@@ -1,0 +1,21 @@
+id,subject,message,label,split
+1,Charge on my card,I see a charge of 49.90 from you on my statement but I don't recognise it. What is it for?,invoice_question,dev
+2,Invoice missing VAT,"The invoice for order 5521 does not show our VAT number. Can you send a corrected one?",invoice_question,dev
+3,Money back please,The headphones broke after two days. I sent them back and would like my money back.,refund_request,dev
+4,Cancel subscription,"Please cancel my premium plan and refund this month, I signed up by mistake.",refund_request,dev
+5,Cannot log in,"Every time I try to sign in it says my password is wrong, even after resetting it.",login_problem,dev
+6,2FA code never arrives,"I don't get the SMS code for two-factor authentication, so I'm locked out.",login_problem,dev
+7,App crashes,The app closes immediately when I open the order history on Android.,bug_report,dev
+8,Export button does nothing,"Clicking ""Export as PDF"" on the dashboard has no effect, no file is downloaded.",bug_report,dev
+9,Where is my parcel?,My order 7712 was supposed to arrive on Monday and the tracking hasn't changed for four days.,delivery_status,dev
+10,Delivery date,Can you tell me when order 8120 will be delivered? I need it before the weekend.,delivery_status,dev
+11,New address,"We moved. Please send all future orders to Lindenstrasse 4, 49074 Osnabrueck.",address_change,dev
+12,Wrong billing address,"The billing address on my account is outdated, please change it to our new office.",address_change,dev
+13,Double payment,I was charged twice for the same order. Can you check this and pay one of them back?,refund_request,dev
+14,Reset link expired,"The reset link in your email says it has expired, although I clicked it right away.",login_problem,dev
+15,Totals are wrong,The sum in the cart is higher than the prices of the items added together.,bug_report,dev
+16,Parcel damaged,The box arrived crushed and the item inside is broken. I want a replacement or my money.,refund_request,dev
+17,Question about my bill,Why does my latest invoice show a shipping fee? Shipping was supposed to be free.,invoice_question,test
+18,Account locked,After three failed attempts my account was locked. How do I unlock it?,login_problem,test
+19,Still waiting,I ordered three weeks ago and nothing has arrived yet.,delivery_status,test
+20,Search broken,"The search finds nothing, even for products I can see on the homepage.",bug_report,test

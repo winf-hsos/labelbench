@@ -1,0 +1,14 @@
+# LLM classifier created by `labelbench new classifier`. Copy this file and
+# the prompt files to a new version before changing anything, so earlier
+# runs stay reproducible.
+classifier: llm
+params:
+  provider: @@provider@@
+  model: @@model@@
+  system_prompt: prompts/@@name@@-system.md   # same for every item: instructions, labels
+  prompt: prompts/@@name@@-item.md            # the item's features
+  label_line: "@@label_line@@"   # how one label appears in {{labels}}; fields of labels.csv
+  reasoning: true                # ask for a short justification, shown in the report
+  max_workers: 8                 # parallel requests
+  options:                       # passed to the provider
+@@options@@
