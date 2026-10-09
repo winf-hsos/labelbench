@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "labelbench"
+version = "0.1.0"
+description = "Evaluate interchangeable classifiers (rule-based or LLM) against a gold standard, with a self-contained HTML report."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pyyaml",
+    "numpy",
+    "scikit-learn",
+]
+
+[project.scripts]
+labelbench = "labelbench.cli:main"
+
+[project.optional-dependencies]
+llm = ["anthropic"]
+dev = ["pytest", "ruff"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/labelbench"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "N", "UP", "B", "SIM", "PTH", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.pytest.ini_options]
+addopts = "-q"

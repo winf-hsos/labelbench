@@ -1,0 +1,18 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Run outputs and LLM cache belong to the project that uses labelbench
+runs/
+.labelbench-cache/
